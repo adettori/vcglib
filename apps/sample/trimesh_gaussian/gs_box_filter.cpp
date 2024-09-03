@@ -13,13 +13,13 @@ struct MyUsedTypes : public vcg::UsedTypes<vcg::Use<MyVertex>   ::AsVertexType,
                                            vcg::Use<MyEdge>     ::AsEdgeType,
                                            vcg::Use<MyFace>     ::AsFaceType>{};
 
-class MyVertex  : public vcg::Vertex< MyUsedTypes, vcg::vertex::InfoOcf, vcg::vertex::Coord3f, vcg::vertex::Color4b, vcg::vertex::Normal3f, vcg::vertex::BitFlags  >{};
+class MyVertex  : public vcg::Vertex< MyUsedTypes, vcg::vertex::Coord3f, vcg::vertex::Color4b, vcg::vertex::Normal3f, vcg::vertex::BitFlags  >{};
 class MyFace    : public vcg::Face<   MyUsedTypes, vcg::face::FFAdj,  vcg::face::VertexRef, vcg::face::BitFlags > {};
 class MyEdge    : public vcg::Edge<   MyUsedTypes> {};
 
 class MyMesh    : public vcg::tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge>  > {};
 
-const std::string properties[] = {"x", "y", "z", "nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
+const std::string properties[] = {"nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
 
 using namespace std;
 
@@ -32,7 +32,8 @@ int main(int argc, char *argv[])
     }
 
     int propLen = sizeof(properties)/sizeof(properties[0]);
-    MyMesh mGauss, mEllips, mBox;
+    MyMesh mGauss, mEllips, mEllipsCluster, mBox;
+    bool isContained = true;
     vcg::tri::io::PlyInfo piOpen;
     MyMesh::PerVertexAttributeHandle<float>* handler_arr = new MyMesh::PerVertexAttributeHandle<float>[sizeof(properties)];
 
@@ -51,10 +52,6 @@ int main(int argc, char *argv[])
     vcg::tri::io::ExporterPLY<MyMesh>::Save(mBox,"box.ply");
 
     // Find indices of relevant properties
-    // Pos
-    int propX = find(&properties[0], properties + propLen, "x") - properties;
-    int propY = find(&properties[0], properties + propLen, "y") - properties;
-    int propZ = find(&properties[0], properties + propLen, "z") - properties;
     // Scale
     int propScaleX = find(&properties[0], properties + propLen, "scale_0") - properties;
     int propScaleY = find(&properties[0], properties + propLen, "scale_1") - properties;
@@ -82,6 +79,7 @@ int main(int argc, char *argv[])
 
     // Loop through vertices, where each one represents a gaussian
     for(MyMesh::VertexIterator gi=mGauss.vert.begin();gi!=mGauss.vert.end();++gi) {
+        isContained = true;
         if(vIdx % 1000 == 0) {
             cout << "GS id: " << vIdx << std::endl;
             cout << "Number of Gaussian Splats left: " << mGauss.VN() << endl;
@@ -90,37 +88,44 @@ int main(int argc, char *argv[])
         // Create solid
         vcg::tri::SuperEllipsoid(mEllips, 2, 2, 2, 24, 12); // r=s=t=2 to get an ellipsoid
 
-        // Translate and scale
-        ellipsePos = vcg::Point3<float>(handler_arr[propX][gi], handler_arr[propY][gi], handler_arr[propZ][gi]);
-        // Need to exponentiate the scale values
-        ellipseScale = vcg::Point3<float>(exp(handler_arr[propScaleX][gi]), exp(handler_arr[propScaleY][gi]), exp(handler_arr[propScaleZ][gi]));
-        transf.SetTranslate(ellipsePos);
-        transf.SetScale(ellipseScale);
-        vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
-
         // Rotate
         rotQuat = vcg::Quaternion<float>(handler_arr[propRot0][gi], handler_arr[propRot1][gi], handler_arr[propRot2][gi], handler_arr[propRot3][gi]);
         rotQuat.ToMatrix(transf);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
         transf.SetIdentity();
 
+        // Translate and scale
+        ellipsePos = vcg::Point3<float>(gi->P().X(), gi->P().Y(), gi->P().Z());
+        // Need to exponentiate the scale values
+        ellipseScale = vcg::Point3<float>(exp(handler_arr[propScaleX][gi]), exp(handler_arr[propScaleY][gi]), exp(handler_arr[propScaleZ][gi]));
+        transf.SetTranslate(ellipsePos);
+        transf.SetScale(ellipseScale);
+        vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
+
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
             if(!box.IsIn(vi->P())) {
                 //cout << box.min.X() << " " << box.min.Y() << " " << box.min.Z() << endl;
-                //cout << vi->P().X() << " " << vi->P().Y() << " " << vi->P().Z() << endl;
+                //cout << vi->P().X() << " " << vi->P().Y() << " " << vi->P().Z() << endl; // Importer not getting the correct attributes from file
                 //cout << box.max.X() << " " << box.max.Y() << " " << box.max.Z() << endl;
                 vcg::tri::Allocator<MyMesh>::DeleteVertex(mGauss, *gi);
+                isContained = false;
                 break;
             }
         }
+
+        if(vIdx % 1000 == 0 && isContained)
+            // Add new ellipsoid to cluster mesh, for visual confirmation
+            vcg::tri::Append<MyMesh, MyMesh>::Mesh(mEllipsCluster, mEllips);
 
         mEllips.Clear();
         vIdx++;
     }
 
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(mGauss);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mGauss,"filteredGs.ply", false, piOpen);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mGauss,"filteredGs.ply", true, piOpen);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mEllipsCluster,"gaussCluster.ply");
+    mEllipsCluster.Clear();
     delete[] handler_arr;
 
     return 0;
