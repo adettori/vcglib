@@ -105,9 +105,6 @@ int main(int argc, char *argv[])
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
             if(!box.IsIn(vi->P())) {
-                //cout << box.min.X() << " " << box.min.Y() << " " << box.min.Z() << endl;
-                //cout << vi->P().X() << " " << vi->P().Y() << " " << vi->P().Z() << endl; // Importer not getting the correct attributes from file
-                //cout << box.max.X() << " " << box.max.Y() << " " << box.max.Z() << endl;
                 vcg::tri::Allocator<MyMesh>::DeleteVertex(mGauss, *gi);
                 isContained = false;
                 break;
