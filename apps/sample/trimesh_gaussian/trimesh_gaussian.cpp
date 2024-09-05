@@ -4,7 +4,7 @@
 #include <vcg/math/base.h>
 #include <vcg/math/quaternion.h>
 #include <vcg/complex/algorithms/create/platonic.h>
-#include <vcg/complex/algorithms/intersection.h>
+#include <vcg/complex/algorithms/update/color.h>
 #include <wrap/io_trimesh/import_ply.h>
 #include <wrap/io_trimesh/export_ply.h>
 
@@ -14,7 +14,7 @@ struct MyUsedTypes : public vcg::UsedTypes<vcg::Use<MyVertex>   ::AsVertexType,
                                            vcg::Use<MyFace>     ::AsFaceType>{};
 
 class MyVertex  : public vcg::Vertex< MyUsedTypes, vcg::vertex::Coord3f, vcg::vertex::Color4b, vcg::vertex::Normal3f, vcg::vertex::BitFlags  >{};
-class MyFace    : public vcg::Face<   MyUsedTypes, vcg::face::FFAdj,  vcg::face::VertexRef, vcg::face::BitFlags > {};
+class MyFace    : public vcg::Face<   MyUsedTypes, vcg::face::FFAdj,  vcg::face::Color4b, vcg::face::VertexRef, vcg::face::BitFlags > {};
 class MyEdge    : public vcg::Edge<   MyUsedTypes> {};
 
 class MyMesh    : public vcg::tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge>  > {};
@@ -22,6 +22,15 @@ class MyMesh    : public vcg::tri::TriMesh< std::vector<MyVertex>, std::vector<M
 const std::string properties[] = {"nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
 
 using namespace std;
+
+int clamp(int v, int lo, int hi) {
+    return min(hi, max(lo, v));
+}
+
+int fdc_to_color(float fdc) {
+    float const SH_C0 = 0.28209479177387814;
+    return clamp(round((0.5 + SH_C0 * fdc)*255), 0, 255);
+}
 
 int main(int argc, char *argv[])
 {
@@ -52,6 +61,11 @@ int main(int argc, char *argv[])
     vcg::tri::io::ExporterPLY<MyMesh>::Save(mBox,"box.ply");
 
     // Find indices of relevant properties
+    // Color
+    int propFDC0 = find(&properties[0], properties + propLen, "f_dc_0") - properties;
+    int propFDC1 = find(&properties[0], properties + propLen, "f_dc_1") - properties;
+    int propFDC2 = find(&properties[0], properties + propLen, "f_dc_2") - properties;
+    int propOpacity = find(&properties[0], properties + propLen, "opacity") - properties;
     // Scale
     int propScaleX = find(&properties[0], properties + propLen, "scale_0") - properties;
     int propScaleY = find(&properties[0], properties + propLen, "scale_1") - properties;
@@ -76,6 +90,7 @@ int main(int argc, char *argv[])
     vcg::Quaternion<float> rotQuat;
     vcg::Point3<float> ellipsePos;
     vcg::Point3<float> ellipseScale;
+    vcg::Color4b ellipseColor;
 
     // Loop through vertices, where each one represents a gaussian
     for(MyMesh::VertexIterator gi=mGauss.vert.begin();gi!=mGauss.vert.end();++gi) {
@@ -101,6 +116,14 @@ int main(int argc, char *argv[])
         transf.SetTranslate(ellipsePos);
         transf.SetScale(ellipseScale);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
+
+        // Color
+        int red = fdc_to_color(handler_arr[propFDC0][gi]);
+        int green = fdc_to_color(handler_arr[propFDC1][gi]);
+        int blue = fdc_to_color(handler_arr[propFDC2][gi]);
+        int alpha = clamp(round(1 / (1 + exp(-handler_arr[propOpacity][gi])) * 255), 0, 255);
+        ellipseColor = vcg::Color4b(red, green, blue, alpha);
+        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, ellipseColor);
 
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
