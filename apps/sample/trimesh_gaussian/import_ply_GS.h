@@ -125,9 +125,9 @@ public:
         int propScaleZ = findPropertyIdx(properties, propLen, "scale_2");
         // Rotation
         int propRot0 = findPropertyIdx(properties, propLen, "rot_0");
-        int propRot1 = findPropertyIdx(properties, propLen, "rot_0");
-        int propRot2 = findPropertyIdx(properties, propLen, "rot_0");
-        int propRot3 = findPropertyIdx(properties, propLen, "rot_0");
+        int propRot1 = findPropertyIdx(properties, propLen, "rot_1");
+        int propRot2 = findPropertyIdx(properties, propLen, "rot_2");
+        int propRot3 = findPropertyIdx(properties, propLen, "rot_3");
         // Spherical Harmonics: only first, assume ordered list
         int propSH0 = findPropertyIdx(properties, propLen, "f_rest_0");
         int totalSH = 44;

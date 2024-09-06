@@ -45,7 +45,6 @@ int main(int argc, char *argv[])
     vcg::tri::io::PlyInfo pi;
     vcg::Matrix44f transf = vcg::Matrix44<float>();
     vcg::Quaternion<float> rotQuat;
-    vcg::Point3<float> ellipsePos;
     vcg::Point3<float> ellipseScale;
     vcg::Color4b ellipseColor;
 
@@ -71,10 +70,9 @@ int main(int argc, char *argv[])
         transf.SetIdentity();
 
         // Translate and scale
-        ellipsePos = vcg::Point3<float>(gi->P().X(), gi->P().Y(), gi->P().Z());
         // Need to exponentiate the scale values
         ellipseScale = handleGauss[gi].scale;
-        transf.SetTranslate(ellipsePos);
+        transf.SetTranslate(gi->P());
         transf.SetScale(ellipseScale);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
 
