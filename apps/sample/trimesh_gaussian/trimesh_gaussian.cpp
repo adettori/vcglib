@@ -4,6 +4,7 @@
 #include <vcg/math/quaternion.h>
 #include <vcg/complex/algorithms/create/platonic.h>
 #include <vcg/complex/algorithms/update/color.h>
+#include <wrap/io_trimesh/io_ply.h>
 #include "./import_ply_GS.h"
 #include <wrap/io_trimesh/export_ply.h>
 
@@ -40,17 +41,18 @@ int main(int argc, char *argv[])
     // @TODO: could add support for box rotation
     vcg::tri::io::ExporterPLY<MyMesh>::Save(mBox,"box.ply");
 
-    MyMesh gauss;
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<MyMesh, float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, float>::Open(gauss, argv[1]);
-
-    cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
-
     int vIdx = 0;
+    vcg::tri::io::PlyInfo pi;
     vcg::Matrix44f transf = vcg::Matrix44<float>();
     vcg::Quaternion<float> rotQuat;
     vcg::Point3<float> ellipsePos;
     vcg::Point3<float> ellipseScale;
     vcg::Color4b ellipseColor;
+
+    MyMesh gauss;
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<MyMesh, float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, float>::Open(gauss, argv[1], pi);
+
+    cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
 
     // Loop through vertices, where each one represents a gaussian
     for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
@@ -99,7 +101,7 @@ int main(int argc, char *argv[])
     }
 
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, argv[2], true);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, argv[2], true, pi);
     vcg::tri::io::ExporterPLY<MyMesh>::Save(mEllipsCluster,"gaussCluster.ply", vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
     mEllipsCluster.Clear();
 
