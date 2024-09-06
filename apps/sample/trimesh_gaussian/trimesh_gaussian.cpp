@@ -1,11 +1,10 @@
 #include <iostream>
-#include <algorithm>
 #include <cmath>
 #include <vcg/math/base.h>
 #include <vcg/math/quaternion.h>
 #include <vcg/complex/algorithms/create/platonic.h>
 #include <vcg/complex/algorithms/update/color.h>
-#include <wrap/io_trimesh/import_ply.h>
+#include "./import_ply_GS.h"
 #include <wrap/io_trimesh/export_ply.h>
 
 class MyVertex; class MyEdge; class MyFace;
@@ -19,18 +18,8 @@ class MyEdge    : public vcg::Edge<   MyUsedTypes> {};
 
 class MyMesh    : public vcg::tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge>  > {};
 
-const std::string properties[] = {"nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
-
 using namespace std;
 
-int clamp(int v, int lo, int hi) {
-    return min(hi, max(lo, v));
-}
-
-int fdc_to_color(float fdc) {
-    float const SH_C0 = 0.28209479177387814;
-    return clamp(round((0.5 + SH_C0 * fdc)*255), 0, 255);
-}
 
 int main(int argc, char *argv[])
 {
@@ -40,17 +29,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int propLen = sizeof(properties)/sizeof(properties[0]);
-    MyMesh mGauss, mEllips, mEllipsCluster, mBox;
+    MyMesh mEllips, mEllipsCluster, mBox;
     bool isContained = true;
-    vcg::tri::io::PlyInfo piOpen;
-    MyMesh::PerVertexAttributeHandle<float>* handler_arr = new MyMesh::PerVertexAttributeHandle<float>[sizeof(properties)];
-
-    for(int i=0;i<propLen;i++) {
-        piOpen.AddPerVertexFloatAttribute(properties[i]);
-        // add a per-vertex attribute with type float
-        handler_arr[i] = vcg::tri::Allocator<MyMesh>:: GetPerVertexAttribute<float> (mGauss, properties[i]);
-    }
 
     // Setup box
     vcg::Point3<float> minBox = vcg::Point3<float>(stof(argv[3]), stof(argv[4]), stof(argv[5]));
@@ -60,30 +40,10 @@ int main(int argc, char *argv[])
     // @TODO: could add support for box rotation
     vcg::tri::io::ExporterPLY<MyMesh>::Save(mBox,"box.ply");
 
-    // Find indices of relevant properties
-    // Color
-    int propFDC0 = find(&properties[0], properties + propLen, "f_dc_0") - properties;
-    int propFDC1 = find(&properties[0], properties + propLen, "f_dc_1") - properties;
-    int propFDC2 = find(&properties[0], properties + propLen, "f_dc_2") - properties;
-    int propOpacity = find(&properties[0], properties + propLen, "opacity") - properties;
-    // Scale
-    int propScaleX = find(&properties[0], properties + propLen, "scale_0") - properties;
-    int propScaleY = find(&properties[0], properties + propLen, "scale_1") - properties;
-    int propScaleZ = find(&properties[0], properties + propLen, "scale_2") - properties;
-    // Rotation
-    int propRot0 = find(&properties[0], properties + propLen, "rot_0") - properties;
-    int propRot1 = find(&properties[0], properties + propLen, "rot_1") - properties;
-    int propRot2 = find(&properties[0], properties + propLen, "rot_2") - properties;
-    int propRot3 = find(&properties[0], properties + propLen, "rot_3") - properties;
+    MyMesh gauss;
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<MyMesh, float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, float>::Open(gauss, argv[1]);
 
-    int ret = vcg::tri::io::ImporterPLY<MyMesh>::Open(mGauss, argv[1], piOpen);
-    if(ret!=0)
-    {
-        printf("Unable to open %s for '%s'\n", argv[1], vcg::tri::io::ImporterPLY<MyMesh>::ErrorMsg(ret));
-        return -1;
-    }
-
-    cout << "Number of Gaussian Splats: " << mGauss.VN() << endl;
+    cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
 
     int vIdx = 0;
     vcg::Matrix44f transf = vcg::Matrix44<float>();
@@ -93,60 +53,55 @@ int main(int argc, char *argv[])
     vcg::Color4b ellipseColor;
 
     // Loop through vertices, where each one represents a gaussian
-    for(MyMesh::VertexIterator gi=mGauss.vert.begin();gi!=mGauss.vert.end();++gi) {
+    for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
         isContained = true;
         if(vIdx % 1000 == 0) {
             cout << "GS id: " << vIdx << std::endl;
-            cout << "Number of Gaussian Splats left: " << mGauss.VN() << endl;
+            cout << "Number of Gaussian Splats left: " << gauss.VN() << endl;
         }
 
         // Create solid
         vcg::tri::SuperEllipsoid(mEllips, 2, 2, 2, 24, 12); // r=s=t=2 to get an ellipsoid
 
         // Rotate
-        rotQuat = vcg::Quaternion<float>(handler_arr[propRot0][gi], handler_arr[propRot1][gi], handler_arr[propRot2][gi], handler_arr[propRot3][gi]);
-        rotQuat.ToMatrix(transf);
+        handleGauss[gi].rot.ToMatrix(transf);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
         transf.SetIdentity();
 
         // Translate and scale
         ellipsePos = vcg::Point3<float>(gi->P().X(), gi->P().Y(), gi->P().Z());
         // Need to exponentiate the scale values
-        ellipseScale = vcg::Point3<float>(exp(handler_arr[propScaleX][gi]), exp(handler_arr[propScaleY][gi]), exp(handler_arr[propScaleZ][gi]));
+        ellipseScale = handleGauss[gi].scale;
         transf.SetTranslate(ellipsePos);
         transf.SetScale(ellipseScale);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
 
         // Color
-        int red = fdc_to_color(handler_arr[propFDC0][gi]);
-        int green = fdc_to_color(handler_arr[propFDC1][gi]);
-        int blue = fdc_to_color(handler_arr[propFDC2][gi]);
-        int alpha = clamp(round(1 / (1 + exp(-handler_arr[propOpacity][gi])) * 255), 0, 255);
-        ellipseColor = vcg::Color4b(red, green, blue, alpha);
-        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, ellipseColor);
+        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, gi->C());
 
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
             if(!box.IsIn(vi->P())) {
-                vcg::tri::Allocator<MyMesh>::DeleteVertex(mGauss, *gi);
+                vcg::tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
                 isContained = false;
                 break;
             }
         }
 
-        if(vIdx % 1000 == 0 && isContained)
+        if(vIdx % 1000 == 0 && isContained) {
             // Add new ellipsoid to cluster mesh, for visual confirmation
+            //cout << int(mEllips.face[0].C().X()) << " " << int(mEllips.face[0].C().Y()) << " " << int(mEllips.face[0].C().Z()) << " " << int(mEllips.face[0].C().W()) << endl;
             vcg::tri::Append<MyMesh, MyMesh>::Mesh(mEllipsCluster, mEllips);
+        }
 
         mEllips.Clear();
         vIdx++;
     }
 
-    vcg::tri::Allocator<MyMesh>::CompactVertexVector(mGauss);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mGauss,"filteredGs.ply", true, piOpen);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mEllipsCluster,"gaussCluster.ply");
+    vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, argv[2], true);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mEllipsCluster,"gaussCluster.ply", vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
     mEllipsCluster.Clear();
-    delete[] handler_arr;
 
     return 0;
 }
