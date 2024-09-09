@@ -49,7 +49,12 @@ int main(int argc, char *argv[])
     vcg::Color4b ellipseColor;
 
     MyMesh gauss;
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<MyMesh, float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, float>::Open(gauss, argv[1], pi);
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh>::Open(gauss, argv[1], pi);
+
+    if(!vcg::tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
+    {
+        return -1;
+    }
 
     cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
 
@@ -62,7 +67,7 @@ int main(int argc, char *argv[])
         }
 
         // Create solid
-        vcg::tri::SuperEllipsoid(mEllips, 2, 2, 2, 24, 12); // r=s=t=2 to get an ellipsoid
+        vcg::tri::Sphere(mEllips, gi->P(), 1);
 
         // Rotate
         handleGauss[gi].rot.ToMatrix(transf);
@@ -72,7 +77,6 @@ int main(int argc, char *argv[])
         // Translate and scale
         // Need to exponentiate the scale values
         ellipseScale = handleGauss[gi].scale;
-        transf.SetTranslate(gi->P());
         transf.SetScale(ellipseScale);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
 
