@@ -27,7 +27,7 @@ set(VCG_EXAMPLE_PROJECTS
 	trimesh_cylinder_clipping
 	trimesh_disk_parametrization
 	trimesh_fitting
-	trimesh_gaussian_support
+	trimesh_gaussian
 	trimesh_geodesic
  	trimesh_geodesic_heat
 	trimesh_harmonic

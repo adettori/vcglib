@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.13)
-project(gs_box_filter)
+project(trimesh_gaussian)
 
 if (VCG_HEADER_ONLY)
 	set(SOURCES
-		gs_box_filter.cpp
+		trimesh_gaussian.cpp
 		${VCG_INCLUDE_DIRS}/wrap/ply/plylib.cpp)
 endif()
 
-add_executable(gs_box_filter
+add_executable(trimesh_gaussian
 	${SOURCES})
 
 target_link_libraries(
-	gs_box_filter
+	trimesh_gaussian
 	PUBLIC
 		vcglib
 	)
