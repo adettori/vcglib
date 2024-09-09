@@ -42,7 +42,7 @@ namespace io {
 This class encapsulate a filter for opening ply Gaussian Splat meshes.
 The ply file format is quite extensible...
 */
-template <class OpenMeshType, typename ScalarType>
+template <class OpenMeshType>
 class ImporterPLYGS
 {
 public:
@@ -54,7 +54,7 @@ public:
     }
 
     // Used to convert degree <= 1 spherical harmonics into
-    static int fdcToColor(ScalarType fdc) {
+    static int fdcToColor(float fdc) {
         return clamp(round((0.5 + SH_C0 * fdc)*255), 0, 255);
     }
 
@@ -64,44 +64,44 @@ public:
     }
 
     /// Standard call for reading a mesh, returns 0 on success.
-    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<OpenMeshType, ScalarType>>
-    static Open( OpenMeshType &m, const char * filename, CallBackPos *cb=0)
+    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float>>
+    static Open( OpenMeshType &m, const char * filename, CallBackPos *cb=0, int degreeSH = 0)
     {
         PlyInfo pi;
         pi.cb=cb;
-        return Open(m, filename, pi);
+        return Open(m, filename, pi, degreeSH);
     }
 
     /// Read a mesh and store in loadmask the loaded field
     /// Note that loadmask is not read! just modified. You cannot specify what fields
     /// have to be read. ALL the data for which your mesh HasSomething and are present
     /// in the file are read in.
-    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<OpenMeshType, ScalarType>>
-    static Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0)
+    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float>>
+    static Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0, int degreeSH = 0)
     {
         PlyInfo pi;
         pi.cb=cb;
-        int r = Open(m, filename,pi);
+        int r = Open(m, filename,pi, degreeSH);
         loadmask=pi.mask;
         return r;
     }
 
     /// read a mesh with all the possible option specified in the PlyInfo obj, returns 0 on success.
-    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<OpenMeshType, ScalarType>>
-    static Open( OpenMeshType &m, const char * filename, PlyInfo &pi )
+    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float>>
+    static Open( OpenMeshType &m, const char * filename, PlyInfo &pi, int degreeSH = 0 )
     {
         assert(filename!=0);
         const std::string properties[] = {"nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
 
         const int propLen = sizeof(properties)/sizeof(properties[0]);
-        typename OpenMeshType::template PerVertexAttributeHandle<ScalarType>* handleArr = new typename OpenMeshType::template PerVertexAttributeHandle<ScalarType>[propLen];
-        typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<OpenMeshType, ScalarType>> handleGs = vcg::tri::Allocator<OpenMeshType>:: template AddPerVertexAttribute<GaussianSplat<OpenMeshType, ScalarType>> (m, "gs");
+        std::vector<typename OpenMeshType::template PerVertexAttributeHandle<float>> handleVec;
+        typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float>> handleGs = vcg::tri::Allocator<OpenMeshType>:: template AddPerVertexAttribute<GaussianSplat<float>> (m, "gs");
 
         // Init attribute handler
         for(int i=0;i<propLen;i++) {
             pi.AddPerVertexFloatAttribute(properties[i]);
             // add a per-vertex attribute with type float
-            handleArr[i] = vcg::tri::Allocator<OpenMeshType>:: template GetPerVertexAttribute<ScalarType> (m, properties[i]);
+            handleVec.push_back(vcg::tri::Allocator<OpenMeshType>:: template GetPerVertexAttribute<float> (m, properties[i]));
         }
 
         // Load gs ply file
@@ -109,12 +109,12 @@ public:
         if(ret!=0)
         {
             printf("Unable to open %s for '%s'\n", filename, vcg::tri::io::ImporterPLY<OpenMeshType>::ErrorMsg(ret));
-            delete[] handleArr;
-            return typename OpenMeshType:: template PerVertexAttributeHandle<GaussianSplat<OpenMeshType, ScalarType>>(nullptr,0);
+            return typename OpenMeshType:: template PerVertexAttributeHandle<GaussianSplat<float>>(nullptr,0);
         }
 
+        // @TODO: find better way to index
         // Find indices of relevant properties
-        // Color
+        // Color (technically sh0)
         int propFDC0 = findPropertyIdx(properties, propLen, "f_dc_0");
         int propFDC1 = findPropertyIdx(properties, propLen, "f_dc_1");
         int propFDC2 = findPropertyIdx(properties, propLen, "f_dc_2");
@@ -129,24 +129,28 @@ public:
         int propRot2 = findPropertyIdx(properties, propLen, "rot_2");
         int propRot3 = findPropertyIdx(properties, propLen, "rot_3");
         // Spherical Harmonics: only first, assume ordered list
-        int propSH0 = findPropertyIdx(properties, propLen, "f_rest_0");
-        int totalSH = 44;
+        // @TODO: find smart way to account for sh degree
+        const int totalSH = 45; // Don't account for the SH0 represented by f_dc_*
+        int propSH1 = findPropertyIdx(properties, propLen, "f_rest_0");
+        float listSH[totalSH];
 
         // Loop through vertices, where each one represents a gaussian
         for(typename OpenMeshType::VertexIterator gi=m.vert.begin();gi!=m.vert.end();++gi)
         {
             // Set color
-            gi->C()[0] = fdcToColor(handleArr[propFDC0][gi]);
-            gi->C()[1] = fdcToColor(handleArr[propFDC1][gi]);
-            gi->C()[2] = fdcToColor(handleArr[propFDC2][gi]);
-            gi->C()[3] = clamp(round(1 / (1 + exp(-handleArr[propOpacity][gi])) * 255), 0, 255);
+            gi->C()[0] = fdcToColor(handleVec[propFDC0][gi]);
+            gi->C()[1] = fdcToColor(handleVec[propFDC1][gi]);
+            gi->C()[2] = fdcToColor(handleVec[propFDC2][gi]);
+            gi->C()[3] = clamp(round(1 / (1 + exp(-handleVec[propOpacity][gi])) * 255), 0, 255);
 
-            vcg::Quaternion<ScalarType> rotQuat = vcg::Quaternion<ScalarType>(handleArr[propRot0][gi], handleArr[propRot1][gi], handleArr[propRot2][gi], handleArr[propRot3][gi]);
-            vcg::Point3<ScalarType> scale = vcg::Point3<ScalarType>(exp(handleArr[propScaleX][gi]), exp(handleArr[propScaleY][gi]), exp(handleArr[propScaleZ][gi]));
-            handleGs[gi] = GaussianSplat<OpenMeshType, ScalarType>(rotQuat, scale);
+            for(int i=0;i<totalSH;i++)
+                listSH[i] = handleVec[propSH1+i][gi];
+
+            // Set rotation and scale
+            vcg::Quaternion<float> rotQuat = vcg::Quaternion<float>(handleVec[propRot0][gi], handleVec[propRot1][gi], handleVec[propRot2][gi], handleVec[propRot3][gi]);
+            vcg::Point3<float> scale = vcg::Point3<float>(exp(handleVec[propScaleX][gi]), exp(handleVec[propScaleY][gi]), exp(handleVec[propScaleZ][gi]));
+            handleGs[gi] = GaussianSplat<float>(rotQuat, scale, listSH);
         }
-
-        delete[] handleArr;
 
         return handleGs;
     }
