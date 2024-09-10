@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    MyMesh mEllips, mEllipsCluster, mBox;
+    MyMesh mEllips, mSampledEllips, mBox;
     bool isContained = true;
 
     // Setup box
@@ -68,18 +68,16 @@ int main(int argc, char *argv[])
 
         // Create solid
         vcg::tri::Octahedron(mEllips);
+        //vcg::tri::SuperEllipsoid(mEllips, 2, 2, 2, 24, 12); // r=s=t=2 to get an ellipsoid
 
         // Rotate
         handleGauss[gi].rot.ToMatrix(transf);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
         transf.SetIdentity();
 
-        // Translate and scale
-        // Need to exponentiate the scale values
-        ellipseScale = handleGauss[gi].scale;
-        transf.SetTranslate(gi->P());
-        transf.SetScale(ellipseScale);
-        vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
+        // Scale and translate
+        vcg::tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].scale);
+        vcg::tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
 
         // Color
         vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, gi->C());
@@ -95,18 +93,30 @@ int main(int argc, char *argv[])
 
         if(vIdx % 1000 == 0 && isContained) {
             // Add new ellipsoid to cluster mesh, for visual confirmation
-            //cout << int(mEllips.face[0].C().X()) << " " << int(mEllips.face[0].C().Y()) << " " << int(mEllips.face[0].C().Z()) << " " << int(mEllips.face[0].C().W()) << endl;
-            vcg::tri::Append<MyMesh, MyMesh>::Mesh(mEllipsCluster, mEllips);
+            gi->SetS();
+            vcg::tri::Append<MyMesh, MyMesh>::Mesh(mSampledEllips, mEllips);
         }
 
         mEllips.Clear();
         vIdx++;
     }
 
+    // Save all remaining gaussians
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
     vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, argv[2], true, pi);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mEllipsCluster,"gaussCluster.ply", vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
-    mEllipsCluster.Clear();
+    // Delete all but the sampled ones
+    vcg::tri::UpdateSelection<MyMesh>::VertexInvert(gauss);
+    vIdx = 0;
+    for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
+        if(gi->IsS())
+            vcg::tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
+        vIdx++;
+    }
+    vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, "gaussSamples.ply", true, pi);
+    // Save ellipsoids from sampled vertices
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,"ellipseSamples.ply", vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
+    mSampledEllips.Clear();
 
     return 0;
 }

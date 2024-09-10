@@ -147,6 +147,7 @@ public:
                 listSH[i] = handleVec[propSH1+i][gi];
 
             // Set rotation and scale
+            // Need to exponentiate the scale values
             vcg::Quaternion<float> rotQuat = vcg::Quaternion<float>(handleVec[propRot0][gi], handleVec[propRot1][gi], handleVec[propRot2][gi], handleVec[propRot3][gi]);
             vcg::Point3<float> scale = vcg::Point3<float>(exp(handleVec[propScaleX][gi]), exp(handleVec[propScaleY][gi]), exp(handleVec[propScaleZ][gi]));
             handleGs[gi] = GaussianSplat<float>(rotQuat, scale, listSH);
