@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
         }
 
         // Create solid
-        vcg::tri::Sphere(mEllips, gi->P(), 1);
+        vcg::tri::Octahedron(mEllips);
 
         // Rotate
         handleGauss[gi].rot.ToMatrix(transf);
@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
         // Translate and scale
         // Need to exponentiate the scale values
         ellipseScale = handleGauss[gi].scale;
+        transf.SetTranslate(gi->P());
         transf.SetScale(ellipseScale);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
 
