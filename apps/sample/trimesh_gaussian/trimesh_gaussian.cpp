@@ -49,7 +49,8 @@ int main(int argc, char *argv[])
     vcg::Color4b ellipseColor;
 
     MyMesh gauss;
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh>::Open(gauss, argv[1], pi);
+    const int DegreeSH = 2; // From 0 to 2
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
 
     if(!vcg::tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
     {
@@ -70,16 +71,16 @@ int main(int argc, char *argv[])
         vcg::tri::Octahedron(mEllips);
 
         // Scale
-        vcg::tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].scale);
+        vcg::tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].getScale());
         // Rotate
-        vcg::QuaternionToMatrix<float,vcg::Matrix44<float>>(handleGauss[gi].rot, transf);
+        vcg::QuaternionToMatrix<float,vcg::Matrix44<float>>(handleGauss[gi].getRotation(), transf);
         vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
         transf.SetIdentity();
         // Translate
         vcg::tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
 
         // Color
-        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, gi->C());
+        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(0,1));
 
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
@@ -112,7 +113,8 @@ int main(int argc, char *argv[])
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
     vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, "gaussSamples.ply", true, pi);
     // Save ellipsoids from sampled vertices
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,"ellipseSamples.ply", vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
+    std::string sampleName = "ellipseSamplesSH";
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,(sampleName+std::to_string(DegreeSH)+".ply").c_str(), vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
     mSampledEllips.Clear();
 
     return 0;
