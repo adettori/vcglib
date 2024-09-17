@@ -24,22 +24,20 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    if(argc != 9) {
+    if(argc != 10) {
         cout << "Insufficient arguments" << endl;
-        cout << "Expected args: input.ply output.ply minXBox minYBox minZBox maxXBox maxYBox maxZBox" << endl;
+        cout << "Expected args: input.ply minXBox minYBox minZBox maxXBox maxYBox maxZBox theta phi" << endl;
         return -1;
     }
 
-    MyMesh mEllips, mSampledEllips, mBox;
+    MyMesh mEllips, mSampledEllips;
     bool isContained = true;
 
     // Setup box
-    vcg::Point3<float> minBox = vcg::Point3<float>(stof(argv[3]), stof(argv[4]), stof(argv[5]));
-    vcg::Point3<float> maxBox = vcg::Point3<float>(stof(argv[6]), stof(argv[7]), stof(argv[8]));
+    vcg::Point3<float> minBox = vcg::Point3<float>(stof(argv[2]), stof(argv[3]), stof(argv[4]));
+    vcg::Point3<float> maxBox = vcg::Point3<float>(stof(argv[5]), stof(argv[6]), stof(argv[7]));
     vcg::Box3<float> box = vcg::Box3<float>(minBox, maxBox);
-    vcg::tri::Box<MyMesh>(mBox, box);
     // @TODO: could add support for box rotation
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mBox,"box.ply");
 
     int vIdx = 0;
     vcg::tri::io::PlyInfo pi;
@@ -47,9 +45,11 @@ int main(int argc, char *argv[])
     vcg::Quaternion<float> rotQuat;
     vcg::Point3<float> ellipseScale;
     vcg::Color4b ellipseColor;
+    float theta = stof(argv[8]);
+    float phi = stof(argv[9]);
 
     MyMesh gauss;
-    const int DegreeSH = 2; // From 0 to 2
+    const int DegreeSH = 1; // From 0 to 2
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
 
     if(!vcg::tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
         vcg::tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
 
         // Color
-        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(0,1));
+        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(theta, phi));
 
         // Delete vertices outside box
         for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
@@ -103,7 +103,8 @@ int main(int argc, char *argv[])
 
     // Save all remaining gaussians
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, argv[2], true, pi);
+    std::string filteredFileName = std::string("filteredGS.ply");
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, filteredFileName.c_str(), true, pi);
     // Delete all but the sampled ones
     vcg::tri::UpdateSelection<MyMesh>::VertexInvert(gauss);
     for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
@@ -111,10 +112,11 @@ int main(int argc, char *argv[])
             vcg::tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
     }
     vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, "gaussSamples.ply", true, pi);
+    std::string gaussFileName = std::string("gaussSamples.ply");
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, gaussFileName.c_str(), true, pi);
     // Save ellipsoids from sampled vertices
-    std::string sampleName = "ellipseSamplesSH";
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,(sampleName+std::to_string(DegreeSH)+".ply").c_str(), vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
+    std::string ellipsFileName = std::string("ellipseSamplesSH") + std::to_string(DegreeSH) + ".ply";
+    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,ellipsFileName.c_str(), vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
     mSampledEllips.Clear();
 
     return 0;
