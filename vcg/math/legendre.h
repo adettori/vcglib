@@ -183,17 +183,17 @@ private:
 
 		for (unsigned l = 2; l < MAX_L; ++l)
 		{
-			matrix[0][l] = legendre_next(l-1, matrix[0][l-1], matrix[0][l-2], cos_theta);
+			matrix[0][l] = this->legendre_next(l-1, matrix[0][l-1], matrix[0][l-2], cos_theta);
 		}
 
 		for(unsigned l = 1; l < MAX_L; ++l)
 		{
 			for (unsigned m = 1; m <= l; ++m)
 			{
-				if (l == m) matrix[m][m] = legendre_P_m_m(m, sin_theta);
-				else if (l == m + 1) matrix[m][l] = legendre_P_m_mplusone(m, matrix[m][m], cos_theta);
+				if (l == m) matrix[m][m] = this->legendre_P_m_m(m, sin_theta);
+				else if (l == m + 1) matrix[m][l] = this->legendre_P_m_mplusone(m, matrix[m][m], cos_theta);
 				else{
-					matrix[m][l] = legendre_next(l-1, m, matrix[m][l-1], matrix[m][l-2], cos_theta);
+					matrix[m][l] = this->legendre_next(l-1, m, matrix[m][l-1], matrix[m][l-2], cos_theta);
 				}
 			}
 		}

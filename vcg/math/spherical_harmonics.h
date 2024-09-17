@@ -183,7 +183,7 @@ public :
 			for (int m = -l; m <= l; ++m)
 			{
 				int index = l * (l+1) + m;
-				f += (coefficients[index] * Real(l, m, theta, phi));
+				f += (this->coefficients[index] * this->Real(l, m, theta, phi));
 			}
 		}
 
