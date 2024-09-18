@@ -6,6 +6,7 @@
 #include <vcg/complex/algorithms/update/color.h>
 #include <wrap/io_trimesh/io_ply.h>
 #include "./import_ply_GS.h"
+#include "./export_splat.h"
 #include <wrap/io_trimesh/export_ply.h>
 using namespace std;
 using namespace vcg;
@@ -25,16 +26,13 @@ class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace
 
 int main(int argc, char *argv[])
 {
-    if(argc != 2) {
+    if(argc < 7) {
         cout << "Insufficient arguments" << endl;
-        cout << "Expected args: input.ply minXBox minYBox minZBox maxXBox maxYBox maxZBox theta phi" << endl;
+        cout << "Expected args: input.ply minXBox minYBox minZBox maxXBox maxYBox maxZBox [theta] [phi]" << endl;
         return -1;
     }
 
     MyMesh mEllips, mSampledEllips;
-    bool isContained = true;
-
-    // @TODO: could add support for box rotation
 
     tri::io::PlyInfo pi;
     Matrix44f transf = Matrix44<float>();
@@ -50,7 +48,7 @@ int main(int argc, char *argv[])
     }
 
     MyMesh gauss;
-    const int DegreeSH = 1; // From 0 to 2
+    const int DegreeSH = 1;
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss =
         tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
 
@@ -58,39 +56,40 @@ int main(int argc, char *argv[])
     {
         return -1;
     }
+
     cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
-    Box3f box;    
+    Box3f box;
     if(argc>7)
     {
         box.min = Point3<float>(stof(argv[2]), stof(argv[3]), stof(argv[4]));
         box.max = Point3<float>(stof(argv[5]), stof(argv[6]), stof(argv[7]));
     }
-    else // if not specified use the bbox of the mesh  to init the box 
+    else // if not specified use the bbox of the mesh  to init the box
     {
         tri::UpdateBounding<MyMesh>::Box(gauss);
         Point3f c = gauss.bbox.Center();
         box.min = c - (c-gauss.bbox.min)*0.5;
-        box.max = c + (gauss.bbox.max-c)*0.5;        
+        box.max = c + (gauss.bbox.max-c)*0.5;
     }
-        
+
     // Loop through vertices, where each one represents a gaussian
     for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
-        
+
         if(tri::Index(gauss,*gi) % 10000 == 0) {
-            printf("GS id: %9i on %9i (Deleted %8i) \r",tri::Index(gauss,*gi), gauss.vert.size(), gauss.vert.size() - gauss.vn );
-            fflush(stdout);            
+            printf("GS id: %9zu on %9zu (Deleted %8zu) \r",tri::Index(gauss,*gi), gauss.vert.size(), gauss.vert.size() - gauss.vn );
+            fflush(stdout);
         }
-        
+
         if(!box.IsIn(gi->P()) || handleGauss[gi].getColor()[3]<50) {
-                tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);               
+                tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
         }
         else
         {
             // Splat is inside the box, continue the processing
             // Create solid
             tri::Octahedron(mEllips);
-            
-            tri::UpdatePosition<MyMesh>::Scale(mEllips,    handleGauss[gi].getScale());
+
+            tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].getScale());
             transf.SetIdentity();
             QuaternionToMatrix<float,Matrix44<float>>(handleGauss[gi].getRotation(), transf);
             tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
@@ -101,15 +100,15 @@ int main(int argc, char *argv[])
             mEllips.Clear();
         }
     }
-    
+
     tri::Allocator<MyMesh>::CompactVertexVector(gauss);
     printf("\n");
-    
+
     printf("Saving surviving vertices (%i) \n", gauss.vn);
     tri::io::ExporterPLY<MyMesh>::Save(gauss, "filteredGS.ply", true, pi);
-    
+
     printf("Saving Colored Ellipsoids\n");
     tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips, "ellipseSamplesSH.ply", tri::io::Mask::IOM_FACECOLOR);
-    
+
     return 0;
 }
