@@ -38,9 +38,9 @@ public:
         this->rot = rot;
         this->scale = scale;
 
-        this->sphR = vcg::math::SphericalHarmonics<float,DegreeSH+1>::Wrap(&vecSHR[0]);
-        this->sphG = vcg::math::SphericalHarmonics<float,DegreeSH+1>::Wrap(&vecSHG[0]);
-        this->sphB = vcg::math::SphericalHarmonics<float,DegreeSH+1>::Wrap(&vecSHB[0]);
+        this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHR[0]);
+        this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHG[0]);
+        this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHB[0]);
 
         // Set color
         this->colorValues = vcg::Point4<ScalarType>(
