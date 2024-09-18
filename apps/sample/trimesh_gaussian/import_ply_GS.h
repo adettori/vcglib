@@ -152,11 +152,13 @@ public:
 
             if(DegreeSH >= 3){
                 prevElems += elemsDegree*3;
-                elemsDegree = 7;
-                for(int i=0;i<elemsDegree;i++)
+                int curIdx = propStartSH + prevElems;
+
+                while(curIdx < propEndSH)
                 {
                     for(int channel=0;channel<3;channel++)
-                        vecSH[channel].push_back(handleVec[propStartSH+prevElems+i*3+channel][gi]);
+                        vecSH[channel].push_back(handleVec[curIdx+channel][gi]);
+                    curIdx += 3;
                 }
             }
 
