@@ -80,7 +80,7 @@ public:
     {
         assert(filename != 0);
         assert(degreeSH >= 0 && degreeSH <= 4);
-        const std::string properties[] = {"nxx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
+        const std::string properties[] = {"f_dc_0", "f_dc_1", "f_dc_2", "f_rest_0", "f_rest_1", "f_rest_2", "f_rest_3", "f_rest_4", "f_rest_5", "f_rest_6", "f_rest_7", "f_rest_8", "f_rest_9", "f_rest_10", "f_rest_11", "f_rest_12", "f_rest_13", "f_rest_14", "f_rest_15", "f_rest_16", "f_rest_17", "f_rest_18", "f_rest_19", "f_rest_20", "f_rest_21", "f_rest_22", "f_rest_23", "f_rest_24", "f_rest_25", "f_rest_26", "f_rest_27", "f_rest_28", "f_rest_29", "f_rest_30", "f_rest_31", "f_rest_32", "f_rest_33", "f_rest_34", "f_rest_35", "f_rest_36", "f_rest_37", "f_rest_38", "f_rest_39", "f_rest_40", "f_rest_41", "f_rest_42", "f_rest_43", "f_rest_44", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"};
 
         const int propLen = sizeof(properties)/sizeof(properties[0]);
         std::vector<typename OpenMeshType::template PerVertexAttributeHandle<float>> handleVec(propLen);
@@ -117,13 +117,15 @@ public:
         int propRot2 = findPropertyIdx(properties, propLen, "rot_2");
         int propRot3 = findPropertyIdx(properties, propLen, "rot_3");
         // Spherical Harmonics: only first, assume ordered list
-        int propSH1 = findPropertyIdx(properties, propLen, "f_rest_0");
+        int propStartSH = findPropertyIdx(properties, propLen, "f_rest_0");
+        int propEndSH = findPropertyIdx(properties, propLen, "f_rest_44");
 
         // Loop through vertices, where each one represents a gaussian
+        // Reference: https://github.com/limacv/GaussianSplattingViewer/blob/main/shaders/gau_vert.glsl
         for(typename OpenMeshType::VertexIterator gi=m.vert.begin();gi!=m.vert.end();++gi)
         {
             std::vector<float> vecSH[3]; // 1 vector per channel
-            int elemsDegree, prevElems = 0;
+            int elemsDegree, prevElems;
             // SH0
             vecSH[0].push_back(handleVec[propFDC0][gi]);
             vecSH[1].push_back(handleVec[propFDC1][gi]);
@@ -131,30 +133,30 @@ public:
 
             if(degreeSH >= 1){
                 elemsDegree = 3;
-                for(int channel=0;channel<3;channel++)
+                for(int i=0;i<elemsDegree;i++)
                 {
-                    for(int i=0;i<elemsDegree;i++)
-                        vecSH[channel].push_back(handleVec[propSH1+channel*elemsDegree+i][gi]);
+                    for(int channel=0;channel<3;channel++)
+                        vecSH[channel].push_back(handleVec[propStartSH+i*3+channel][gi]);
                 }
             }
 
             if(degreeSH >= 2){
-                prevElems += elemsDegree*3;
+                prevElems = elemsDegree*3;
                 elemsDegree = 5;
-                for(int channel=0;channel<3;channel++)
+                for(int i=0;i<elemsDegree;i++)
                 {
-                    for(int i=0;i<elemsDegree;i++)
-                        vecSH[channel].push_back(handleVec[propSH1+prevElems+channel*elemsDegree+i][gi]);
+                    for(int channel=0;channel<3;channel++)
+                        vecSH[channel].push_back(handleVec[propStartSH+prevElems+i*3+channel][gi]);
                 }
             }
 
             if(degreeSH >= 3){
                 prevElems += elemsDegree*3;
                 elemsDegree = 7;
-                for(int channel=0;channel<3;channel++)
+                for(int i=0;i<elemsDegree;i++)
                 {
-                    for(int i=0;i<elemsDegree;i++)
-                        vecSH[channel].push_back(handleVec[propSH1+prevElems+channel*elemsDegree+i][gi]);
+                    for(int channel=0;channel<3;channel++)
+                        vecSH[channel].push_back(handleVec[propStartSH+prevElems+i*3+channel][gi]);
                 }
             }
 
