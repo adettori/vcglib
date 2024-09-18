@@ -7,24 +7,25 @@
 #include <wrap/io_trimesh/io_ply.h>
 #include "./import_ply_GS.h"
 #include <wrap/io_trimesh/export_ply.h>
+using namespace std;
+using namespace vcg;
 
 class MyVertex; class MyEdge; class MyFace;
-struct MyUsedTypes : public vcg::UsedTypes<vcg::Use<MyVertex>   ::AsVertexType,
-                                           vcg::Use<MyEdge>     ::AsEdgeType,
-                                           vcg::Use<MyFace>     ::AsFaceType>{};
+struct MyUsedTypes : public UsedTypes<Use<MyVertex>   ::AsVertexType,
+                                           Use<MyEdge>     ::AsEdgeType,
+                                           Use<MyFace>     ::AsFaceType>{};
 
-class MyVertex  : public vcg::Vertex< MyUsedTypes, vcg::vertex::Coord3f, vcg::vertex::Color4b, vcg::vertex::Normal3f, vcg::vertex::BitFlags  >{};
-class MyFace    : public vcg::Face<   MyUsedTypes, vcg::face::FFAdj,  vcg::face::Color4b, vcg::face::VertexRef, vcg::face::BitFlags > {};
-class MyEdge    : public vcg::Edge<   MyUsedTypes> {};
+class MyVertex  : public Vertex< MyUsedTypes, vertex::Coord3f, vertex::Color4b, vertex::Normal3f, vertex::BitFlags  >{};
+class MyFace    : public Face<   MyUsedTypes, face::FFAdj,  face::Color4b, face::VertexRef, face::BitFlags > {};
+class MyEdge    : public Edge<   MyUsedTypes> {};
 
-class MyMesh    : public vcg::tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge>  > {};
+class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge>  > {};
 
-using namespace std;
 
 
 int main(int argc, char *argv[])
 {
-    if(argc != 10) {
+    if(argc != 2) {
         cout << "Insufficient arguments" << endl;
         cout << "Expected args: input.ply minXBox minYBox minZBox maxXBox maxYBox maxZBox theta phi" << endl;
         return -1;
@@ -33,91 +34,82 @@ int main(int argc, char *argv[])
     MyMesh mEllips, mSampledEllips;
     bool isContained = true;
 
-    // Setup box
-    vcg::Point3<float> minBox = vcg::Point3<float>(stof(argv[2]), stof(argv[3]), stof(argv[4]));
-    vcg::Point3<float> maxBox = vcg::Point3<float>(stof(argv[5]), stof(argv[6]), stof(argv[7]));
-    vcg::Box3<float> box = vcg::Box3<float>(minBox, maxBox);
     // @TODO: could add support for box rotation
 
-    int vIdx = 0;
-    vcg::tri::io::PlyInfo pi;
-    vcg::Matrix44f transf = vcg::Matrix44<float>();
-    vcg::Quaternion<float> rotQuat;
-    vcg::Point3<float> ellipseScale;
-    vcg::Color4b ellipseColor;
-    float theta = stof(argv[8]);
-    float phi = stof(argv[9]);
+    tri::io::PlyInfo pi;
+    Matrix44f transf = Matrix44<float>();
+    Quaternion<float> rotQuat;
+    Point3<float> ellipseScale;
+    Color4b ellipseColor;
+    float theta = 0;
+    float phi = 0;
+    if(argc>9)
+    {
+        theta=stof(argv[8]);
+        phi=stof(argv[9]);
+    }
 
     MyMesh gauss;
     const int DegreeSH = 1; // From 0 to 2
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss = vcg::tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss =
+        tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
 
-    if(!vcg::tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
+    if(!tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
     {
         return -1;
     }
-
     cout << "Number of Gaussian Splats: " << gauss.VN() << endl;
-
+    Box3f box;    
+    if(argc>7)
+    {
+        box.min = Point3<float>(stof(argv[2]), stof(argv[3]), stof(argv[4]));
+        box.max = Point3<float>(stof(argv[5]), stof(argv[6]), stof(argv[7]));
+    }
+    else // if not specified use the bbox of the mesh  to init the box 
+    {
+        tri::UpdateBounding<MyMesh>::Box(gauss);
+        Point3f c = gauss.bbox.Center();
+        box.min = c - (c-gauss.bbox.min)*0.5;
+        box.max = c + (gauss.bbox.max-c)*0.5;        
+    }
+        
     // Loop through vertices, where each one represents a gaussian
     for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
-        isContained = true;
-        if(vIdx % 1000 == 0) {
-            cout << "GS id: " << vIdx << std::endl;
-            cout << "Number of Gaussian Splats left: " << gauss.VN() << endl;
+        
+        if(tri::Index(gauss,*gi) % 10000 == 0) {
+            printf("GS id: %9i on %9i (Deleted %8i) \r",tri::Index(gauss,*gi), gauss.vert.size(), gauss.vert.size() - gauss.vn );
+            fflush(stdout);            
         }
-
-        // Create solid
-        vcg::tri::Octahedron(mEllips);
-
-        // Scale
-        vcg::tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].getScale());
-        // Rotate
-        vcg::QuaternionToMatrix<float,vcg::Matrix44<float>>(handleGauss[gi].getRotation(), transf);
-        vcg::tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
-        transf.SetIdentity();
-        // Translate
-        vcg::tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
-
-        // Color
-        vcg::tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(theta, phi));
-
-        // Delete vertices outside box
-        for(MyMesh::VertexIterator vi=mEllips.vert.begin();vi!=mEllips.vert.end();++vi) {
-            if(!box.IsIn(vi->P())) {
-                vcg::tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
-                isContained = false;
-                break;
-            }
+        
+        if(!box.IsIn(gi->P()) || handleGauss[gi].getColor()[3]<50) {
+                tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);               
         }
-
-        if(isContained) {
-            // Add new ellipsoid to cluster mesh, for visual confirmation
-            gi->SetS();
-            vcg::tri::Append<MyMesh, MyMesh>::Mesh(mSampledEllips, mEllips);
+        else
+        {
+            // Splat is inside the box, continue the processing
+            // Create solid
+            tri::Octahedron(mEllips);
+            
+            tri::UpdatePosition<MyMesh>::Scale(mEllips,    handleGauss[gi].getScale());
+            transf.SetIdentity();
+            QuaternionToMatrix<float,Matrix44<float>>(handleGauss[gi].getRotation(), transf);
+            tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
+            tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
+            // Color
+            tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(theta, phi));
+            tri::Append<MyMesh, MyMesh>::Mesh(mSampledEllips, mEllips);
+            mEllips.Clear();
         }
-
-        mEllips.Clear();
-        vIdx++;
     }
-
-    // Save all remaining gaussians
-    vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
-    std::string filteredFileName = std::string("filteredGS.ply");
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, filteredFileName.c_str(), true, pi);
-    // Delete all but the sampled ones
-    vcg::tri::UpdateSelection<MyMesh>::VertexInvert(gauss);
-    for(MyMesh::VertexIterator gi=gauss.vert.begin();gi!=gauss.vert.end();++gi) {
-        if(gi->IsS())
-            vcg::tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
-    }
-    vcg::tri::Allocator<MyMesh>::CompactVertexVector(gauss);
-    std::string gaussFileName = std::string("gaussSamples.ply");
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(gauss, gaussFileName.c_str(), true, pi);
-    // Save ellipsoids from sampled vertices
-    std::string ellipsFileName = std::string("ellipseSamplesSH") + std::to_string(DegreeSH) + ".ply";
-    vcg::tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips,ellipsFileName.c_str(), vcg::tri::io::Mask::IOM_FACECOLOR+vcg::tri::io::Mask::IOM_VERTCOLOR);
-    mSampledEllips.Clear();
-
+    
+    tri::Allocator<MyMesh>::CompactVertexVector(gauss);
+    printf("\n");
+    
+    printf("Saving surviving vertices (%i) \n", gauss.vn);
+    tri::io::ExporterPLY<MyMesh>::Save(gauss, "filteredGS.ply", true, pi);
+    
+    printf("Saving Colored Ellipsoids\n");
+    tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips, "ellipseSamplesSH.ply", tri::io::Mask::IOM_FACECOLOR);
+    
     return 0;
 }
