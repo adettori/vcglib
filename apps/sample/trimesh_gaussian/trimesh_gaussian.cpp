@@ -48,9 +48,14 @@ int main(int argc, char *argv[])
     }
 
     MyMesh gauss;
-    const int DegreeSH = 1;
+    const int DegreeSH = 3;
+    int ret = tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
+    if(ret != 0) {
+        cout << "Error encountered while importing Gaussian splats: " << ret << endl;
+    }
+
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss =
-        tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
+        vcg::tri::Allocator<MyMesh>:: template GetPerVertexAttribute<GaussianSplat<float,DegreeSH>> (gauss, "gs");;
 
     if(!tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
     {

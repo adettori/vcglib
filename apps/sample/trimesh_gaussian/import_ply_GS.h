@@ -64,8 +64,7 @@ public:
     /// Note that loadmask is not read! just modified. You cannot specify what fields
     /// have to be read. ALL the data for which your mesh HasSomething and are present
     /// in the file are read in.
-    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>>
-    static Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0, int degreeSH = 0)
+    static int Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0, int degreeSH = 0)
     {
         PlyInfo pi;
         pi.cb=cb;
@@ -75,8 +74,7 @@ public:
     }
 
     /// read a mesh with all the possible option specified in the PlyInfo obj, returns 0 on success.
-    typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>>
-    static Open( OpenMeshType &m, const char * filename, PlyInfo &pi)
+    static int Open( OpenMeshType &m, const char * filename, PlyInfo &pi)
     {
         assert(filename != 0);
         assert(DegreeSH >= 0 && DegreeSH <= 4);
@@ -98,7 +96,7 @@ public:
         if(ret!=0)
         {
             printf("Unable to open %s for '%s'\n", filename, vcg::tri::io::ImporterPLY<OpenMeshType>::ErrorMsg(ret));
-            return typename OpenMeshType:: template PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>>(nullptr,0);
+            return pi.status;
         }
 
         // Find indices of relevant properties
@@ -169,7 +167,7 @@ public:
             handleGs[gi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vecSH[0], vecSH[1], vecSH[2], handleVec[propOpacity][gi]);
         }
 
-        return handleGs;
+        return 0;
     }
 
 }; // end class

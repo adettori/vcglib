@@ -10,7 +10,8 @@
 
 using namespace std;
 
-template <typename ScalarType, int DegreeSH> class GaussianSplat {
+template <typename ScalarType, int DegreeSH>
+class GaussianSplat {
 
 private:
     vcg::Point4<ScalarType> colorValues; // SH0 color
