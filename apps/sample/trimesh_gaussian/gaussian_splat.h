@@ -14,7 +14,7 @@ template <typename ScalarType, int DegreeSH>
 class GaussianSplat {
 
 private:
-    vcg::Point4<ScalarType> colorValues; // SH0 color
+    vcg::Color4b color; // SH0 color
     vcg::Quaternion<ScalarType> rot;
     vcg::Point3<ScalarType> scale;
     vcg::math::SphericalHarmonics<ScalarType, DegreeSH+1> sphR, sphG, sphB;
@@ -39,17 +39,23 @@ public:
         this->rot = rot;
         this->scale = scale;
 
-        this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHR[0]);
-        this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHG[0]);
-        this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHB[0]);
+        this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHR[0]);  // red
+        this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHG[0]);  // green
+        this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&vecSHB[0]);  // blue
 
         // Set color
-        this->colorValues = vcg::Point4<ScalarType>(
-            SH_C0*vecSHR[0],
-            SH_C0*vecSHG[0],
-            SH_C0*vecSHB[0],
+        this->color = vcg::Color4b(
+            fdcToColor(SH_C0*vecSHR[0]),
+            fdcToColor(SH_C0*vecSHG[0]),
+            fdcToColor(SH_C0*vecSHB[0]),
             clamp(round(1 / (1 + exp(-alpha)) * 255), 0, 255)
         );
+    }
+
+    GaussianSplat(vcg::Quaternion<ScalarType> rot, vcg::Point3<ScalarType> scale, vcg::Color4b color) {
+        this->rot = rot;
+        this->scale = scale;
+        this->color = color;
     }
 
     ~GaussianSplat() {
@@ -57,14 +63,7 @@ public:
 
     vcg::Color4b getColor()
     {
-        vcg::Color4b color = vcg::Color4b(
-            fdcToColor(this->colorValues[0]),
-            fdcToColor(this->colorValues[1]),
-            fdcToColor(this->colorValues[2]),
-            this->colorValues[3]
-            );
-
-        return color;
+        return this->color;
     }
 
     vcg::Color4b getColor(ScalarType theta, ScalarType phi)
