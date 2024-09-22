@@ -6,7 +6,7 @@
 #include <vcg/complex/algorithms/update/color.h>
 #include <wrap/io_trimesh/import.h>
 #include <wrap/io_trimesh/export_ply.h>
-#include "../trimesh_gaussian/import_ply_GS.h"
+#include "../trimesh_gaussian/export_ply_GS.h"
 using namespace std;
 using namespace vcg;
 
@@ -50,11 +50,11 @@ int main(int argc, char *argv[])
 {
     if(argc < 3) {
         cout << "Insufficient arguments" << endl;
-        cout << "Expected args: input.ply output.ply" << endl;
+        cout << "Expected args: inputPointCloud.ply output.ply" << endl;
         return -1;
     }
 
-    MyMesh m;
+    MyMesh m, gauss;
 
     // Load input mesh
     tri::io::Importer<MyMesh>::Open(m, argv[1]);
@@ -63,15 +63,16 @@ int main(int argc, char *argv[])
     computeVertexRadius<MyMesh>(m, 10);
 
     MyMesh::PerVertexAttributeHandle<float> handleR = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "radius");
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,0>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
-    vector<float> shR, shG, shB;
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,3>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,3>>(m, "gs");
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
-        Quaternion<float> rotQuat;
+        Quaternion<float> rotQuat(1,0,0,0);
         float scaleValue = handleR[vi];
         vcg::Point3<float> scale(scaleValue, scaleValue, scaleValue);
-        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->cC());
+        handleGS[vi] = GaussianSplat<float,3>(rotQuat, scale, vi->cC());
     }
+
+    tri::io::ExporterPLYGS<MyMesh, 3>::Save(m, argv[2], true);
 
     return 0;
 }
