@@ -162,9 +162,9 @@ public:
         this->scale = scale;
         this->color = color;
 
-        vector<ScalarType> shr = {colorToFdc(color[0])};
-        vector<ScalarType> shg = {colorToFdc(color[1])};
-        vector<ScalarType> shb = {colorToFdc(color[2])};
+        vector<ScalarType> shr = {colorToFdc(color[0])/SH_C0};
+        vector<ScalarType> shg = {colorToFdc(color[1])/SH_C0};
+        vector<ScalarType> shb = {colorToFdc(color[2])/SH_C0};
 
         this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shr[0]);  // red
         this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shg[0]);  // green
