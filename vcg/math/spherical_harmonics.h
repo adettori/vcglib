@@ -174,7 +174,12 @@ public :
 		return sph;
 	}
 
-	ScalarType operator()(ScalarType theta, ScalarType phi)
+    static ScalarType* getCoefficients(SphericalHarmonics &sph)
+    {
+        return sph.coefficients;
+    }
+
+    ScalarType operator()(ScalarType theta, ScalarType phi)
 	{
 		ScalarType f = 0;
 
