@@ -41,7 +41,8 @@ private:
 
     static int alphaToOpacity(int alpha)
     {
-        return log(alpha/(255-alpha));
+        ScalarType eps = 0.0000001;
+        return log(alpha/(255-alpha+eps));
     }
 
     static vector<vector<ScalarType>> splitSHChannels(vector<ScalarType> vecSH)
