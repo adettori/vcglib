@@ -53,22 +53,22 @@ public:
 
     /// Standard call for reading a mesh, returns 0 on success.
     typename OpenMeshType::template PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>>
-    static Open( OpenMeshType &m, const char * filename, CallBackPos *cb=0, int degreeSH = 0)
+    static Open( OpenMeshType &m, const char * filename, CallBackPos *cb=0)
     {
         PlyInfo pi;
         pi.cb=cb;
-        return Open(m, filename, pi, degreeSH);
+        return Open(m, filename, pi);
     }
 
     /// Read a mesh and store in loadmask the loaded field
     /// Note that loadmask is not read! just modified. You cannot specify what fields
     /// have to be read. ALL the data for which your mesh HasSomething and are present
     /// in the file are read in.
-    static int Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0, int degreeSH = 0)
+    static int Open( OpenMeshType &m, const char * filename, int & loadmask, CallBackPos *cb =0)
     {
         PlyInfo pi;
         pi.cb=cb;
-        int r = Open(m, filename,pi, degreeSH);
+        int r = Open(m, filename,pi);
         loadmask=pi.mask;
         return r;
     }
@@ -122,49 +122,25 @@ public:
         // Reference: https://github.com/limacv/GaussianSplattingViewer/blob/main/shaders/gau_vert.glsl
         for(typename OpenMeshType::VertexIterator gi=m.vert.begin();gi!=m.vert.end();++gi)
         {
-            std::vector<float> vecSH[3]; // 1 vector per channel
-            int elemsDegree, prevElems;
+            if(pi.cb && (vcg::tri::Index(m, *gi)%1000==0) && (m.vn != 0) )(*pi.cb)(100*tri::Index(m, *gi)/m.vn, "Loading Splats");
+
+            vector<float> vecSH;
             // SH0
-            vecSH[0].push_back(handleVec[propFDC0][gi]);
-            vecSH[1].push_back(handleVec[propFDC1][gi]);
-            vecSH[2].push_back(handleVec[propFDC2][gi]);
+            vecSH.push_back(handleVec[propFDC0][gi]);
+            vecSH.push_back(handleVec[propFDC1][gi]);
+            vecSH.push_back(handleVec[propFDC2][gi]);
 
-            if(DegreeSH >= 1){
-                elemsDegree = 3;
-                for(int i=0;i<elemsDegree;i++)
-                {
-                    for(int channel=0;channel<3;channel++)
-                        vecSH[channel].push_back(handleVec[propStartSH+i*3+channel][gi]);
-                }
-            }
-
-            if(DegreeSH >= 2){
-                prevElems = elemsDegree*3;
-                elemsDegree = 5;
-                for(int i=0;i<elemsDegree;i++)
-                {
-                    for(int channel=0;channel<3;channel++)
-                        vecSH[channel].push_back(handleVec[propStartSH+prevElems+i*3+channel][gi]);
-                }
-            }
-
-            if(DegreeSH >= 3){
-                prevElems += elemsDegree*3;
-                int curIdx = propStartSH + prevElems;
-
-                while(curIdx < propEndSH)
-                {
-                    for(int channel=0;channel<3;channel++)
-                        vecSH[channel].push_back(handleVec[curIdx+channel][gi]);
-                    curIdx += 3;
-                }
+            // Everything else SH related
+            for(int i=propStartSH;i<=propEndSH;i++)
+            {
+                vecSH.push_back(handleVec[i][gi]);
             }
 
             // Set rotation and scale
             // Need to exponentiate the scale values
             vcg::Quaternion<float> rotQuat = vcg::Quaternion<float>(handleVec[propRot0][gi], handleVec[propRot1][gi], handleVec[propRot2][gi], handleVec[propRot3][gi]);
             vcg::Point3<float> scale = vcg::Point3<float>(exp(handleVec[propScaleX][gi]), exp(handleVec[propScaleY][gi]), exp(handleVec[propScaleZ][gi]));
-            handleGs[gi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vecSH[0], vecSH[1], vecSH[2], handleVec[propOpacity][gi]);
+            handleGs[gi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vecSH, handleVec[propOpacity][gi]);
         }
 
         return 0;

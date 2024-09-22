@@ -6,8 +6,8 @@
 #include <vcg/complex/algorithms/update/color.h>
 #include <wrap/io_trimesh/io_ply.h>
 #include "./import_ply_GS.h"
-#include "./export_splat.h"
-#include <wrap/io_trimesh/export_ply.h>
+#include "./export_ply_GS.h"
+
 using namespace std;
 using namespace vcg;
 
@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     }
 
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,DegreeSH>> handleGauss =
-        vcg::tri::Allocator<MyMesh>:: template GetPerVertexAttribute<GaussianSplat<float,DegreeSH>> (gauss, "gs");;
+        vcg::tri::Allocator<MyMesh>:: template GetPerVertexAttribute<GaussianSplat<float,DegreeSH>> (gauss, "gs");
 
     if(!tri::Allocator<MyMesh>::IsValidHandle(gauss, handleGauss))
     {
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
             fflush(stdout);
         }
 
-        if(!box.IsIn(gi->P()) || handleGauss[gi].getColor()[3]<50) {
+        if(!box.IsIn(gi->P()) || GaussianSplat<float,DegreeSH>::getColor(handleGauss[gi])[3]<50) {
                 tri::Allocator<MyMesh>::DeleteVertex(gauss, *gi);
         }
         else
@@ -94,13 +94,13 @@ int main(int argc, char *argv[])
             // Create solid
             tri::Octahedron(mEllips);
 
-            tri::UpdatePosition<MyMesh>::Scale(mEllips, handleGauss[gi].getScale());
+            tri::UpdatePosition<MyMesh>::Scale(mEllips, GaussianSplat<float,DegreeSH>::getScale(handleGauss[gi]));
             transf.SetIdentity();
-            QuaternionToMatrix<float,Matrix44<float>>(handleGauss[gi].getRotation(), transf);
+            QuaternionToMatrix<float,Matrix44<float>>(GaussianSplat<float,DegreeSH>::getRotation(handleGauss[gi]), transf);
             tri::UpdatePosition<MyMesh>::Matrix(mEllips, transf);
             tri::UpdatePosition<MyMesh>::Translate(mEllips, gi->P());
             // Color
-            tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, handleGauss[gi].getColor(theta, phi));
+            tri::UpdateColor<MyMesh>::PerFaceConstant(mEllips, GaussianSplat<float,DegreeSH>::getColor(handleGauss[gi], theta, phi));
             tri::Append<MyMesh, MyMesh>::Mesh(mSampledEllips, mEllips);
             mEllips.Clear();
         }
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     printf("Saving surviving vertices (%i) \n", gauss.vn);
-    tri::io::ExporterPLY<MyMesh>::Save(gauss, "filteredGS.ply", true, pi);
+    tri::io::ExporterPLYGS<MyMesh, DegreeSH>::Save(gauss, "filteredGS.ply", true);
 
     printf("Saving Colored Ellipsoids\n");
     tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips, "ellipseSamplesSH.ply", tri::io::Mask::IOM_FACECOLOR);
