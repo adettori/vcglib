@@ -29,6 +29,11 @@ private:
         return clamp(round((0.5 + value)*255), 0, 255);
     }
 
+    static ScalarType colorToFdc(float value)
+    {
+        return value/255-0.5;
+    }
+
     static vector<vector<ScalarType>> splitSHChannels(vector<ScalarType> vecSH)
     {
         vector<vector<ScalarType>> channelSH = {vector<ScalarType>(), vector<ScalarType>(), vector<ScalarType>()}; // 1 vector per channel
@@ -157,7 +162,20 @@ public:
         this->scale = scale;
         this->color = color;
 
-        // TODO: init colorValues
+        vector<ScalarType> shr = {colorToFdc(color[0])};
+        vector<ScalarType> shg = {colorToFdc(color[1])};
+        vector<ScalarType> shb = {colorToFdc(color[2])};
+
+        this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shr[0]);  // red
+        this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shg[0]);  // green
+        this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shb[0]);  // blue
+
+        // Approximate original values
+        this->colorValues = vcg::Point4<ScalarType>(
+            shr[0],
+            shg[0],
+            shb[0],
+            100); // TODO: temp value
     }
 
     ~GaussianSplat() {
