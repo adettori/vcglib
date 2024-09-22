@@ -24,14 +24,24 @@ private:
         return min(hi, max(lo, v));
     }
 
-    static int fdcToColor(float value)
+    static int fdcToColor(ScalarType value)
     {
         return clamp(round((0.5 + value)*255), 0, 255);
     }
 
-    static ScalarType colorToFdc(float value)
+    static ScalarType colorToFdc(ScalarType value)
     {
         return value/255-0.5;
+    }
+
+    static int opacityToAlpha(ScalarType opacity)
+    {
+        return clamp(round(1 / (1 + exp(-opacity)) * 255), 0, 255);
+    }
+
+    static int alphaToOpacity(int alpha)
+    {
+        return log(alpha/(255-alpha));
     }
 
     static vector<vector<ScalarType>> splitSHChannels(vector<ScalarType> vecSH)
@@ -130,7 +140,7 @@ public:
     GaussianSplat() {}
 
     GaussianSplat(vcg::Quaternion<ScalarType> &rot, vcg::Point3<ScalarType> &scale,
-                  vector<ScalarType> &vecSH, ScalarType alpha) {
+                  vector<ScalarType> &vecSH, ScalarType opacity) {
         // Set rotation and scale
         this->rot = rot;
         this->scale = scale;
@@ -146,14 +156,14 @@ public:
             channelSH[0][0],
             channelSH[1][0],
             channelSH[2][0],
-            alpha);
+            opacity);
 
         // Set color
         this->color = vcg::Color4b(
             fdcToColor(SH_C0*channelSH[0][0]),
             fdcToColor(SH_C0*channelSH[1][0]),
             fdcToColor(SH_C0*channelSH[2][0]),
-            clamp(round(1 / (1 + exp(-alpha)) * 255), 0, 255)
+            opacityToAlpha(opacity)
         );
     }
 
@@ -175,7 +185,7 @@ public:
             shr[0],
             shg[0],
             shb[0],
-            100); // TODO: temp value
+            alphaToOpacity(color[3]));
     }
 
     ~GaussianSplat() {
