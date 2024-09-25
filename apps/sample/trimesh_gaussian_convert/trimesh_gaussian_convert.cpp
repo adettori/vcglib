@@ -175,19 +175,23 @@ void flatSplatApprox(MyMesh &m)
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
 
         vcg::Point3<float> normal = vi->cN();
-        vcg::Matrix33<float> rotMat;
+        vcg::Matrix44<float> rotMat;
+        vcg::Matrix44<float> translMat1, translMat2;
+
+        // Translate vertex to origin and translate normal accordingly
+        translMat1.SetTranslate(-vi->cP());
+        translMat2.SetTranslate(vi->cP());
 
         // Compute rotation
-        // Translate vertex to origin and translate normal accordingly
-        vcg::Point3<float> newNormal = normal - vi->cP();
+        vcg::Point3<float> newNormal = translMat1 * normal;
 
-        float angleZ = vcg::Angle(newNormal, vcg::Point3<float>(0,0,1));
-        vcg::Point3<float> orthZ = Point3<float>(0,0,1) ^ newNormal.normalized();
-        vcg::Matrix33<float> matZ = rotMat.SetRotateRad(angleZ, orthZ);
+        float angleZ = Angle(Point3<float>(0,0,1), newNormal);
+        vcg::Point3<float> orthZ = Point3<float>(0,0,1) ^ newNormal;
+        vcg::Matrix44<float> matZ = rotMat.SetRotateRad(angleZ, orthZ);
 
         float size = 1;
         Quaternion<float> rotQuat;
-        rotQuat.FromMatrix(matZ);
+        rotQuat.FromMatrix(translMat2*matZ*translMat1);
         vcg::Point3<float> scale(1, 1, 0.1);
         handleGS[vi] = GaussianSplat<float,3>(rotQuat,size * scale, vi->cC());
     }
@@ -205,20 +209,31 @@ void flatSplatApproxPCA(MyMesh &m)
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         vector<vcg::Point3<float>> pca = handlePCA[vi];
+        vcg::Matrix33<float> rotMat;
 
         // Compute scale
         vcg::Point3<float> scale(pca[0].Norm(), pca[1].Norm(), pca[0].Norm()/20);
 
         // Compute rotation
+        // Translate vertex point to origin, together with normal
+        vcg::Point3<float> normal = vi->cN();
+        vcg::Point3<float> newNormal = normal - vi->cP();
+
+        // Align normal of vertex with normal of pca vectors
+        float angleNormal = vcg::Angle(pca[2], newNormal);
+        vcg::Point3<float> orthNormal = pca[2] ^ newNormal.normalized();
+        vcg::Matrix33<float> matNormal = rotMat.SetRotateRad(angleNormal, orthNormal);
+
+        // Align one of the pca axis by rotating around normal
+
         // Get angles between std axis and pca axis
         // Construct orthogonal vector to plane on which angle lies and rotate around it
         float angleMax = vcg::AngleN(pca[0].normalized(), vcg::Point3<float>(0,0,1));
-        vcg::Matrix33<float> rotMat;
         vcg::Point3<float> orthMax = Point3<float>(0,1,0) ^ pca[0].normalized();
         vcg::Matrix33<float> matMax = rotMat.SetRotateRad(angleMax, orthMax);
 
-        float angleMin = vcg::AngleN(pca[1].normalized(), matMax*vcg::Point3<float>(0,1,0));
-        vcg::Point3<float> orthMin = (matMax*vcg::Point3<float>(0,1,0)) ^ pca[1].normalized();
+        float angleMin = vcg::AngleN(pca[1].normalized(), vcg::Point3<float>(0,1,0));
+        vcg::Point3<float> orthMin = (vcg::Point3<float>(0,1,0)) ^ pca[1].normalized();
         vcg::Matrix33<float> matMin = rotMat.SetRotateRad(angleMin, orthMin);
 
         Quaternion<float> rotQuat;
@@ -241,8 +256,8 @@ int main(int argc, char *argv[])
     tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
     //uniformSplatApprox(mPointCloud);
-    flatSplatApproxPCA(mPointCloud);
-    //flatSplatApprox(mPointCloud);
+    //flatSplatApproxPCA(mPointCloud);
+    flatSplatApprox(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 3>::Save(mPointCloud, argv[2], true);
 
