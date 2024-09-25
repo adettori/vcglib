@@ -28,10 +28,68 @@ struct MyUsedTypes : public UsedTypes<Use<MyVertex>   ::AsVertexType,
                                       Use<MyFace>     ::AsFaceType>{};
 
 class MyVertex  : public Vertex< MyUsedTypes, vertex::Coord3f, vertex::Color4b, vertex::Normal3f, vertex::VFAdj, vertex::BitFlags  >{};
-class MyFace    : public Face<   MyUsedTypes, face::FFAdj, face::VFAdj, face::Color4b, face::VertexRef, face::BitFlags > {};
+class MyFace    : public Face<   MyUsedTypes, face::FFAdj, face::VFAdj, face::Normal3f, face::Color4b, face::VertexRef, face::BitFlags > {};
 class MyEdge    : public Edge<   MyUsedTypes> {};
 
 class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge> > {};
+
+template <typename MeshType>
+class GaussianSplatConverter {
+public:
+    
+    typedef typename MeshType::VertexType     VertexType;
+    typedef typename MeshType::VertexType::CoordType     CoordType;
+    typedef typename MeshType::VertexPointer  VertexPointer;
+    typedef typename MeshType::VertexIterator VertexIterator;
+    typedef typename MeshType::FaceIterator FaceIterator;
+    typedef typename MeshType::ScalarType			ScalarType;
+    
+    
+ /**
+ * @brief PerFaceSplatApprox
+ * @param m the mesh to be converted into splats
+ * @param m_gs the mesh to store the splats
+ * 
+ * This function converts a mesh into a set of gaussian splats, one for each face
+ * placed at the barycenter of the face, oriented along the face normal, and scaled
+ * by the size of the face.
+ */
+static void PerFaceSplat(MeshType &m, MeshType &m_gs)
+{
+    m_gs.Clear();
+    tri::UpdateNormal<MeshType>::PerFaceNormalized(m);
+    tri::UpdateColor<MeshType>::PerFaceFromVertex(m);
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m_gs, "gs");
+    tri::Allocator<MeshType>::AddVertices(m_gs, m.face.size());
+    
+    VertexIterator vi = m_gs.vert.begin();
+    for(FaceIterator fi=m.face.begin();fi!=m.face.end();++fi,++vi) {
+        Point3f normal = fi->N();
+        Point3f barycenter = Barycenter(*fi);
+        Point3f v1 = fi->V(0)->cP() - barycenter;
+        float radius = v1.Norm();
+        Point3f v2 = normal^v1;
+        
+        v1.Normalize();
+        v2.Normalize();
+        vcg::Matrix44<float> rotMat;
+        rotMat.SetColumn(0, normal);
+        rotMat.SetColumn(0, v1);
+        rotMat.SetColumn(0, v2);
+        Quaternion<float> rotQuat;
+        rotQuat.FromMatrix(rotMat);
+        Quaternion<float> rotQuat2(1,0,0,0); // Rotation irrelevant for a sphere
+        
+        Point3f scale(radius/10, radius, radius);
+        vi->P()=barycenter;
+        handleGS[vi] = GaussianSplat<float,1>(rotQuat2, scale, fi->C() );
+    }
+}
+
+};
+
+
+
 
 template<typename _MeshType>
 void computeVertexAvgDist(_MeshType& mesh, int nNeighbors)
@@ -249,13 +307,15 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    MyMesh inputMesh;
     MyMesh mPointCloud;
 
     // Load input mesh
-    tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
+    tri::io::Importer<MyMesh>::Open(inputMesh, argv[1]);
 
     //uniformSplatApprox(mPointCloud);
-    uniformSplatApprox(mPointCloud);
+    // uniformSplatApprox(mPointCloud);
+    GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
     //flatSplatApproxPCA(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
