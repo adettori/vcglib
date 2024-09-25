@@ -117,7 +117,19 @@ public :
 
 		else return SQRT_TWO * complex_spherical_harmonic_im(l, -m, theta, phi);
 	}
-
+    /**
+	 * @brief Project
+	 * @param fun
+	 * @param n_samples
+	 * @return 
+	 * @details
+	 * 
+	 * This function computes the spherical harmonics coefficients of a function
+	 * defined on the sphere. The function is sampled at n_samples points on the
+	 * sphere. The function is represented by a functor that takes as input the
+	 * spherical coordinates theta and phi and returns the value of the function
+	 * at that direction.
+	 */
 	template <typename PolarFunctor>
 	static SphericalHarmonics Project(PolarFunctor * fun, unsigned n_samples)
 	{

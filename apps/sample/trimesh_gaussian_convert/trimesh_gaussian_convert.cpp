@@ -36,28 +36,25 @@ class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace
 template<typename _MeshType>
 void computeVertexAvgDist(_MeshType& mesh, int nNeighbors)
 {
-    typedef typename _MeshType::ScalarType    Scalar;
+    typedef typename _MeshType::ScalarType    ScalarType;
     if (!vcg::tri::HasPerVertexAttribute(mesh, "radius")) {
-        vcg::tri::Allocator<_MeshType>::template AddPerVertexAttribute<Scalar>(mesh, "avgDist");
+        vcg::tri::Allocator<_MeshType>::template AddPerVertexAttribute<ScalarType>(mesh, "avgDist");
     }
 
-    typename _MeshType::template PerVertexAttributeHandle<Scalar> h;
-    h = vcg::tri::Allocator<_MeshType>::template FindPerVertexAttribute<Scalar>(mesh, "avgDist");
-    assert(vcg::tri::Allocator<_MeshType>::template IsValidHandle<Scalar>(mesh, h));
-
-    auto positions = vcg::ConstDataWrapper<vcg::Point3<Scalar>>(
-        &mesh.vert[0].P(),
-        mesh.vert.size(),
-        size_t(mesh.vert[1].P().V()) - size_t(mesh.vert[0].P().V()));
-
-    vcg::KdTree<Scalar> knn(positions);
-    typename vcg::KdTree<Scalar>::PriorityQueue pq;
+    typename _MeshType::template PerVertexAttributeHandle<ScalarType> h;
+    h = vcg::tri::Allocator<_MeshType>::template FindPerVertexAttribute<ScalarType>(mesh, "avgDist");
+    assert(vcg::tri::Allocator<_MeshType>::template IsValidHandle<ScalarType>(mesh, h));
+    
+    VertexConstDataWrapper<_MeshType> DW(mesh);
+    KdTree<ScalarType> knn(DW);
+    
+    typename vcg::KdTree<ScalarType>::PriorityQueue pq;
     for (size_t i = 0; i < mesh.vert.size(); i++) {
         knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
-        Scalar totDist = 0;
+        ScalarType totDist = 0;
         for(int j=0;j<pq.getNofElements();j++)
             totDist += sqrt(pq.getWeight(j));
-        h[i] = totDist / Scalar(pq.getNofElements());
+        h[i] = totDist / ScalarType(pq.getNofElements());
     }
 }
 
@@ -147,19 +144,21 @@ void computeVertexPCA(_MeshType& mesh, int nNeighbors)
         computePCA<_MeshType>(pointsVec, &h[i][0]);
     }
 }
+// Uniform splat approximation
+// we generate a splat for each vertex
+// all splats are spherical scaled by the average distance to the n nearest neighbours
 
 void uniformSplatApprox(MyMesh &m)
 {
     // Compute radius attribute of each vertex using the 10 nearest neighbours
-    computeVertexAvgDist<MyMesh>(m, 10);
+    computeVertexAvgDist<MyMesh>(m, 6);
 
-    MyMesh::PerVertexAttributeHandle<float> handleR = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "avgDist");
+    MyMesh::PerVertexAttributeHandle<float> radiusH = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "avgDist");
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         Quaternion<float> rotQuat(1,0,0,0); // Rotation irrelevant for a sphere
-        float scaleValue = handleR[vi];
-        vcg::Point3<float> scale(scaleValue, scaleValue, scaleValue);
+        Point3f scale(radiusH[vi], radiusH[vi], radiusH[vi]);
         handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
     }
 }
@@ -174,7 +173,7 @@ void flatSplatApprox(MyMesh &m)
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
 
-        vcg::Point3<float> normal = vi->cN();
+        Point3f normal = vi->cN();
         vcg::Matrix44<float> rotMat;
         vcg::Matrix44<float> translMat1, translMat2;
 
@@ -183,16 +182,16 @@ void flatSplatApprox(MyMesh &m)
         translMat2.SetTranslate(vi->cP());
 
         // Compute rotation
-        vcg::Point3<float> newNormal = translMat1 * normal;
+        Point3f newNormal = translMat1 * normal;
 
         float angleZ = Angle(Point3<float>(0,0,1), newNormal);
-        vcg::Point3<float> orthZ = Point3<float>(0,0,1) ^ newNormal;
+        Point3f orthZ = Point3<float>(0,0,1) ^ newNormal;
         vcg::Matrix44<float> matZ = rotMat.SetRotateRad(angleZ, orthZ);
 
         float size = 0.01;
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(translMat2*matZ*translMat1);
-        vcg::Point3<float> scale(1, 1, 0.1);
+        Point3f scale(1, 1, 0.1);
         handleGS[vi] = GaussianSplat<float,1>(rotQuat,size*scale, vi->cC());
     }
 }
@@ -200,7 +199,7 @@ void flatSplatApprox(MyMesh &m)
 void flatSplatApproxPCA(MyMesh &m)
 {
     // Setup attributes
-    MyMesh::PerVertexAttributeHandle<vector<vcg::Point3<float>>> handlePCA = tri::Allocator<MyMesh>::GetPerVertexAttribute<vector<vcg::Point3<float>>>(m, "pca");
+    MyMesh::PerVertexAttributeHandle<vector<Point3f>> handlePCA = tri::Allocator<MyMesh>::GetPerVertexAttribute<vector<Point3f>>(m, "pca");
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,3>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,3>>(m, "gs");
 
     // Compute PCA per vertex
@@ -208,32 +207,32 @@ void flatSplatApproxPCA(MyMesh &m)
     cout << "PCA computed" << endl;
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
-        vector<vcg::Point3<float>> pca = handlePCA[vi];
+        vector<Point3f> pca = handlePCA[vi];
         vcg::Matrix33<float> rotMat;
 
         // Compute scale
-        vcg::Point3<float> scale(pca[0].Norm(), pca[1].Norm(), pca[0].Norm()/20);
+        Point3f scale(pca[0].Norm(), pca[1].Norm(), pca[0].Norm()/20);
 
         // Compute rotation
         // Translate vertex point to origin, together with normal
-        vcg::Point3<float> normal = vi->cN();
-        vcg::Point3<float> newNormal = normal - vi->cP();
+        Point3f normal = vi->cN();
+        Point3f newNormal = normal - vi->cP();
 
         // Align normal of vertex with normal of pca vectors
         float angleNormal = vcg::Angle(pca[2], newNormal);
-        vcg::Point3<float> orthNormal = pca[2] ^ newNormal.normalized();
+        Point3f orthNormal = pca[2] ^ newNormal.normalized();
         vcg::Matrix33<float> matNormal = rotMat.SetRotateRad(angleNormal, orthNormal);
 
         // Align one of the pca axis by rotating around normal
 
         // Get angles between std axis and pca axis
         // Construct orthogonal vector to plane on which angle lies and rotate around it
-        float angleMax = vcg::AngleN(pca[0].normalized(), vcg::Point3<float>(0,0,1));
-        vcg::Point3<float> orthMax = Point3<float>(0,1,0) ^ pca[0].normalized();
+        float angleMax = vcg::AngleN(pca[0].normalized(), Point3f(0,0,1));
+        Point3f orthMax = Point3<float>(0,1,0) ^ pca[0].normalized();
         vcg::Matrix33<float> matMax = rotMat.SetRotateRad(angleMax, orthMax);
 
-        float angleMin = vcg::AngleN(pca[1].normalized(), vcg::Point3<float>(0,1,0));
-        vcg::Point3<float> orthMin = (vcg::Point3<float>(0,1,0)) ^ pca[1].normalized();
+        float angleMin = vcg::AngleN(pca[1].normalized(), Point3f(0,1,0));
+        Point3f orthMin = (Point3f(0,1,0)) ^ pca[1].normalized();
         vcg::Matrix33<float> matMin = rotMat.SetRotateRad(angleMin, orthMin);
 
         Quaternion<float> rotQuat;
@@ -256,7 +255,7 @@ int main(int argc, char *argv[])
     tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
     //uniformSplatApprox(mPointCloud);
-    flatSplatApprox(mPointCloud);
+    uniformSplatApprox(mPointCloud);
     //flatSplatApproxPCA(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
