@@ -154,20 +154,20 @@ void uniformSplatApprox(MyMesh &m)
     computeVertexAvgDist<MyMesh>(m, 10);
 
     MyMesh::PerVertexAttributeHandle<float> handleR = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "avgDist");
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,3>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,3>>(m, "gs");
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         Quaternion<float> rotQuat(1,0,0,0); // Rotation irrelevant for a sphere
         float scaleValue = handleR[vi];
         vcg::Point3<float> scale(scaleValue, scaleValue, scaleValue);
-        handleGS[vi] = GaussianSplat<float,3>(rotQuat, scale, vi->cC());
+        handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
     }
 }
 
 void flatSplatApprox(MyMesh &m)
 {
     // Setup attributes
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,3>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,3>>(m, "gs");
+    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute normals per vertex
     vcg::tri::UpdateNormal<MyMesh>::PerVertex(m);
@@ -189,11 +189,11 @@ void flatSplatApprox(MyMesh &m)
         vcg::Point3<float> orthZ = Point3<float>(0,0,1) ^ newNormal;
         vcg::Matrix44<float> matZ = rotMat.SetRotateRad(angleZ, orthZ);
 
-        float size = 1;
+        float size = 0.01;
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(translMat2*matZ*translMat1);
         vcg::Point3<float> scale(1, 1, 0.1);
-        handleGS[vi] = GaussianSplat<float,3>(rotQuat,size * scale, vi->cC());
+        handleGS[vi] = GaussianSplat<float,1>(rotQuat,size*scale, vi->cC());
     }
 }
 
@@ -256,10 +256,10 @@ int main(int argc, char *argv[])
     tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
     //uniformSplatApprox(mPointCloud);
-    //flatSplatApproxPCA(mPointCloud);
     flatSplatApprox(mPointCloud);
+    //flatSplatApproxPCA(mPointCloud);
 
-    tri::io::ExporterPLYGS<MyMesh, 3>::Save(mPointCloud, argv[2], true);
+    tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
 
     return 0;
 }
