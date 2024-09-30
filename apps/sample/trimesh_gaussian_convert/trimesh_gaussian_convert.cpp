@@ -33,7 +33,7 @@ class MyEdge    : public Edge<   MyUsedTypes> {};
 
 class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace> , std::vector<MyEdge> > {};
 
-template <typename MeshType>
+template <typename MeshType, int DegreeSH>
 class GaussianSplatConverter {
 
 private:
@@ -167,7 +167,7 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
     m_gs.Clear();
     tri::UpdateNormal<MeshType>::PerFaceNormalized(m);
     tri::UpdateColor<MeshType>::PerFaceFromVertex(m);
-    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m_gs, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,DegreeSH>>(m_gs, "gs");
     tri::Allocator<MeshType>::AddVertices(m_gs, m.face.size());
     
     VertexIterator vi = m_gs.vert.begin();
@@ -182,15 +182,14 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
         v2.Normalize();
         vcg::Matrix44<float> rotMat;
         rotMat.SetColumn(0, normal);
-        rotMat.SetColumn(0, v1);
-        rotMat.SetColumn(0, v2);
+        rotMat.SetColumn(1, v1);
+        rotMat.SetColumn(2, v2);
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(rotMat);
-        Quaternion<float> rotQuat2(1,0,0,0); // Rotation irrelevant for a sphere
         
         Point3f scale(radius/10, radius, radius);
         vi->P()=barycenter;
-        handleGS[vi] = GaussianSplat<float,0>(rotQuat2, scale, fi->C());
+        handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, fi->C());
 
         /*
         // Debug info
@@ -219,12 +218,12 @@ static void PerVertexUniformSplat(MeshType &m, int numNeigh)
     computeVertexAvgDist(m, numNeigh);
 
     auto radiusH = tri::Allocator<MeshType>::template GetPerVertexAttribute<float>(m, "avgDist");
-    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,DegreeSH>>(m, "gs");
 
     for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         Quaternion<float> rotQuat(1,0,0,0); // Rotation irrelevant for a sphere
         Point3f scale(radiusH[vi], radiusH[vi], radiusH[vi]);
-        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
+        handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vi->C());
     }
 }
 
@@ -238,7 +237,7 @@ static void PerVertexUniformSplat(MeshType &m, int numNeigh)
 static void PerVertexFlatSplat(MeshType &m, float size=0.01)
 {
     // Setup attributes
-    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,DegreeSH>>(m, "gs");
 
     // Compute normals per vertex
     vcg::tri::template UpdateNormal<MeshType>::PerVertexNormalized(m);
@@ -256,7 +255,7 @@ static void PerVertexFlatSplat(MeshType &m, float size=0.01)
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(matZ);
         Point3f scale(size, size, size/10);
-        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
+        handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vi->C());
 
         /*
         // Debug info
@@ -280,7 +279,7 @@ static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
 {
     // Setup attributes
     auto handlePCA = tri::Allocator<MeshType>::template GetPerVertexAttribute<vector<Point3f>>(m, "pca");
-    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,DegreeSH>>(m, "gs");
 
     // Compute PCA per vertex
     computeVertexPCA(m, numNeigh);
@@ -351,7 +350,7 @@ static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
 
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(matMin*matMax*matNormal);
-        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
+        handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vi->C());
     }
 }
 
@@ -367,17 +366,18 @@ int main(int argc, char *argv[])
 
     MyMesh inputMesh;
     MyMesh mPointCloud;
+    const int DegreeSH = 0;
 
     // Load input mesh
     tri::io::Importer<MyMesh>::Open(inputMesh, argv[1]);
 
     // Chosen method
-    GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
+    GaussianSplatConverter<MyMesh,DegreeSH>::PerFaceSplat(inputMesh, mPointCloud);
     //GaussianSplatConverter<MyMesh>::PerVertexUniformSplat(inputMesh, 10);
     //GaussianSplatConverter<MyMesh>::PerVertexFlatSplat(inputMesh);
     //GaussianSplatConverter<MyMesh>::PerVertexFlatSplatPCA(inputMesh);
 
-    tri::io::ExporterPLYGS<MyMesh, 0>::Save(mPointCloud, argv[2], true);
+    tri::io::ExporterPLYGS<MyMesh,DegreeSH>::Save(mPointCloud, argv[2], true);
 
     return 0;
 }
