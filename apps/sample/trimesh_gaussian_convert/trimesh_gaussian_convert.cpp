@@ -183,12 +183,9 @@ void computeVertexPCA(_MeshType& mesh, int nNeighbors)
     h = vcg::tri::Allocator<_MeshType>::template FindPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
     assert(vcg::tri::Allocator<_MeshType>::template IsValidHandle<vector<vcg::Point3<Scalar>>>(mesh, h));
 
-    auto positions = vcg::ConstDataWrapper<vcg::Point3<Scalar>>(
-        &mesh.vert[0].P(),
-        mesh.vert.size(),
-        size_t(mesh.vert[1].P().V()) - size_t(mesh.vert[0].P().V()));
+    VertexConstDataWrapper<_MeshType> DW(mesh);
 
-    vcg::KdTree<Scalar> knn(positions);
+    vcg::KdTree<Scalar> knn(DW);
     typename vcg::KdTree<Scalar>::PriorityQueue pq;
     for (size_t i = 0; i < mesh.vert.size(); i++) {
         knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
@@ -226,7 +223,7 @@ void flatSplatApprox(MyMesh &m)
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute normals per vertex
-    vcg::tri::UpdateNormal<MyMesh>::PerVertex(m);
+    vcg::tri::UpdateNormal<MyMesh>::PerVertexNormalized(m);
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
 
@@ -260,64 +257,74 @@ void flatSplatApproxPCA(MyMesh &m)
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute PCA per vertex
-    computeVertexPCA<MyMesh>(m, 10);
+    computeVertexPCA<MyMesh>(m, 5);
     cout << "PCA computed" << endl;
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         vector<Point3f> pca = handlePCA[vi];
         vcg::Matrix44<float> rotMat;
-        vcg::Matrix44<float> translMat1, translMat2;
 
         // Compute scale
         Point3f scale(pca[0].Norm(), pca[1].Norm(), pca[0].Norm()/20);
 
-        // Translate vertex to origin and translate normal accordingly
-        translMat1.SetTranslate(-vi->cP());
-        translMat2.SetTranslate(vi->cP());
-
         // Compute rotation
         // Translate vertex point to origin, together with normal
-        Point3f newNormal = translMat1 * vi->cN();
+        Point3f normal = vi->cN();
 
         // Build orthogonal basis starting from newNormal
         Eigen::Vector3f normEigVec;
         Eigen::Vector3f orthEigVec;
-        newNormal.ToEigenVector(normEigVec);
+        normal.ToEigenVector(normEigVec);
         orthEigVec = normEigVec.unitOrthogonal();
         Point3f normalBasis1;
         normalBasis1.FromEigenVector(orthEigVec);
-        Point3f normalBasis2 = rotMat.SetRotateDeg(90, newNormal) * normalBasis1;
-
-        Point3f newPCA0 = translMat1 * pca[0];
-        Point3f newPCA1 = translMat1 * pca[1];
-        Point3f newPCA2 = translMat1 * pca[2];
+        Point3f normalBasis2 = rotMat.SetRotateDeg(-90, normal) * normalBasis1;
 
         // Align normal of vertex with normal of pca vectors
-        float angleNormal = vcg::Angle(newNormal, newPCA2);
-        Point3f orthNormal = newPCA2 ^ newNormal.normalized();
-        vcg::Matrix44<float> matNormal = rotMat.SetRotateRad(angleNormal, orthNormal);
+        float angleNormal = vcg::Angle(normal, pca[2]);
+        Point3f orthNormal = pca[2] ^ normal;
+        vcg::Matrix44<float> matNormal = rotMat.SetRotateRad(-angleNormal, orthNormal);
 
         // Update normal basis
+        normal = matNormal * normal;
         normalBasis1 = matNormal * normalBasis1;
         normalBasis2 = matNormal * normalBasis2;
 
         // Align one of the pca axis by rotating around normal
-        float angleMax = vcg::Angle(newPCA0, normalBasis1);
-        vcg::Matrix44<float> matMax = rotMat.SetRotateRad(angleMax, newNormal);
+        float angleMax = vcg::Angle(normalBasis1, pca[0]);
+        vcg::Matrix44<float> matMax = rotMat.SetRotateRad(-angleMax, normal);
 
         // Update normal basis
         normalBasis1 = matMax * normalBasis1;
         normalBasis2 = matMax * normalBasis2;
 
-        float angleMin = vcg::Angle(newPCA1, normalBasis2);
-        vcg::Matrix44<float> matMin = rotMat.SetRotateRad(angleMin, newNormal);
+        float angleMin = vcg::Angle(normalBasis2, pca[1]);
+        vcg::Matrix44<float> matMin = rotMat.SetRotateRad(-angleMin, normal);
 
+        /*
         // Update normal basis (not used, just to make procedure clear)
-        //normalBasis1 = matMin * normalBasis1;
-        //normalBasis2 = matMin * normalBasis2;
+        normalBasis1 = matMin * normalBasis1;
+        normalBasis2 = matMin * normalBasis2;
+
+        // Debug info
+        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
+        cout << normalBasis1[0] << " " << normalBasis1[1] << " " << normalBasis1[2] << endl;
+        cout << normalBasis2[0] << " " << normalBasis2[1] << " " << normalBasis2[2] << endl;
+        cout << pca[2][0] << " " << pca[2][1] << " " << pca[2][2] << endl;
+        cout << normalBasis1 * normalBasis2 << endl;
+        cout << vcg::Angle(normal, normalBasis1) << endl;
+        cout << vcg::Angle(normal, normalBasis2) << endl;
+        cout << vcg::Angle(normal, pca[0]) << endl;
+        cout << vcg::Angle(normal, pca[1]) << endl;
+        cout << vcg::Angle(normal, pca[2]) << endl;
+        cout << vcg::Angle(normalBasis1, pca[0]) << endl;
+        cout << vcg::Angle(normalBasis2, pca[1]) << endl;
+        cout << endl;
+        exit(0);
+        */
 
         Quaternion<float> rotQuat;
-        rotQuat.FromMatrix(translMat2*matMin*matMax*matNormal*translMat1);
+        rotQuat.FromMatrix(matMin*matMax*matNormal);
         handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
     }
 }
@@ -334,10 +341,10 @@ int main(int argc, char *argv[])
     MyMesh mPointCloud;
 
     // Load input mesh
-    tri::io::Importer<MyMesh>::Open(inputMesh, argv[1]);
+    tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
     // uniformSplatApprox(mPointCloud);
-    GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
+    // GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
     flatSplatApproxPCA(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
