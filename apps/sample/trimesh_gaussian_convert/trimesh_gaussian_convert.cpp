@@ -118,7 +118,7 @@ static void computePCA(const vector<typename MeshType::CoordType> &pointVec,
 
 static void computeVertexPCA(MeshType& mesh, int nNeighbors)
 {
-    typedef typename MeshType::ScalarType    Scalar;
+    typedef typename MeshType::ScalarType Scalar;
     if (!vcg::tri::HasPerVertexAttribute(mesh, "pca")) {
         vcg::tri::Allocator<MeshType>::template AddPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
     }
@@ -194,69 +194,90 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
     }
 }
 
-// Uniform splat approximation
-// we generate a splat for each vertex
-// all splats are spherical scaled by the average distance to the n nearest neighbours
-
-static void uniformSplatApprox(MyMesh &m)
+/**
+ * @brief PerVertexUniformSplat
+ * @param m the mesh to be converted into splats
+ *
+ * This function converts a mesh into a set of gaussian splats, one for each vertex,
+ * with each splat being a sphere scaled according to the avg distance of its numNeigh neighbours.
+ */
+static void PerVertexUniformSplat(MeshType &m, int numNeigh)
 {
     // Compute radius attribute of each vertex using the 10 nearest neighbours
-    computeVertexAvgDist(m, 6);
+    computeVertexAvgDist(m, numNeigh);
 
-    MyMesh::PerVertexAttributeHandle<float> radiusH = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "avgDist");
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    typename MeshType::template PerVertexAttributeHandle<float> radiusH =
+        tri::Allocator<MeshType>::template GetPerVertexAttribute<float>(m, "avgDist");
+    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS =
+        tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
-    for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
+    for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         Quaternion<float> rotQuat(1,0,0,0); // Rotation irrelevant for a sphere
         Point3f scale(radiusH[vi], radiusH[vi], radiusH[vi]);
         handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
     }
 }
 
-static void flatSplatApprox(MyMesh &m)
+/**
+ * @brief PerVertexFlatSplat
+ * @param m the mesh to be converted into splats
+ *
+ * This function converts a mesh into a set of gaussian splats, one for each vertex,
+ * with each splat being a flattened sphere, scaled according to the input parameter size.
+ */
+static void PerVertexFlatSplat(MeshType &m, float size=0.01)
 {
     // Setup attributes
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS =
+        tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute normals per vertex
-    vcg::tri::UpdateNormal<MyMesh>::PerVertexNormalized(m);
+    vcg::tri::template UpdateNormal<MeshType>::PerVertexNormalized(m);
 
-    for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
+    for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
 
         Point3f normal = vi->cN();
         vcg::Matrix44<float> rotMat;
-        vcg::Matrix44<float> translMat1, translMat2;
-
-        // Translate vertex to origin and translate normal accordingly
-        translMat1.SetTranslate(-vi->cP());
-        translMat2.SetTranslate(vi->cP());
 
         // Compute rotation
-        Point3f newNormal = translMat1 * normal;
+        float angleZ = Angle(Point3<float>(0,0,1), normal);
+        Point3f orthZ = Point3<float>(0,0,1) ^ normal;
+        vcg::Matrix44<float> matZ = rotMat.SetRotateRad(-angleZ, orthZ);
 
-        float angleZ = Angle(Point3<float>(0,0,1), newNormal);
-        Point3f orthZ = Point3<float>(0,0,1) ^ newNormal;
-        vcg::Matrix44<float> matZ = rotMat.SetRotateRad(angleZ, orthZ);
-
-        float size = 0.01;
         Quaternion<float> rotQuat;
-        rotQuat.FromMatrix(translMat2*matZ*translMat1);
+        rotQuat.FromMatrix(matZ);
         Point3f scale(1, 1, 0.1);
         handleGS[vi] = GaussianSplat<float,1>(rotQuat,size*scale, vi->cC());
+
+        /*
+        // Debug info
+        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
+        cout << vcg::Angle(matZ*normal, Point3<float>(0,0,1)) << endl;
+        cout << endl;
+        exit(0);
+        */
     }
 }
 
-static void flatSplatApproxPCA(MyMesh &m)
+/**
+ * @brief PerVertexFlatSplatPCA
+ * @param m the mesh to be converted into splats
+ *
+ * This function converts a mesh into a set of gaussian splats, one for each vertex,
+ * with each splat being a flattened ellipsoid, scaled by the norms of the PCA vectors
+ * computed on the numNeigh neighbours
+ */
+static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
 {
     // Setup attributes
-    MyMesh::PerVertexAttributeHandle<vector<Point3f>> handlePCA = tri::Allocator<MyMesh>::GetPerVertexAttribute<vector<Point3f>>(m, "pca");
-    MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    typename MeshType::template PerVertexAttributeHandle<vector<Point3f>> handlePCA = tri::Allocator<MeshType>::template GetPerVertexAttribute<vector<Point3f>>(m, "pca");
+    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute PCA per vertex
-    computeVertexPCA(m, 5);
+    computeVertexPCA(m, numNeigh);
     cout << "PCA computed" << endl;
 
-    for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
+    for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         vector<Point3f> pca = handlePCA[vi];
         vcg::Matrix44<float> rotMat;
 
@@ -341,9 +362,11 @@ int main(int argc, char *argv[])
     // Load input mesh
     tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
-    // GaussianSplatConverter<MyMesh>::uniformSplatApprox(mPointCloud);
-    // GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
-    GaussianSplatConverter<MyMesh>::flatSplatApproxPCA(mPointCloud);
+
+    //GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
+    //GaussianSplatConverter<MyMesh>::PerVertexUniformSplat(mPointCloud);
+    GaussianSplatConverter<MyMesh>::PerVertexFlatSplat(mPointCloud);
+    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplatPCA(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
 
