@@ -45,7 +45,7 @@ private:
         return log(alpha/(255-alpha+eps));
     }
 
-    static vector<vector<ScalarType>> splitSHChannels(vector<ScalarType> vecSH)
+    static vector<vector<ScalarType>> splitSHChannels(vector<ScalarType> &vecSH)
     {
         vector<vector<ScalarType>> channelSH = {vector<ScalarType>(), vector<ScalarType>(), vector<ScalarType>()}; // 1 vector per channel
         int elemsDegree, prevElems;
@@ -89,7 +89,7 @@ private:
         return channelSH;
     }
 
-    static vector<ScalarType> mergeSHChannels(vector<vector<ScalarType>> channelSH)
+    static vector<ScalarType> mergeSHChannels(vector<vector<ScalarType>> &channelSH)
     {
         vector<ScalarType> vecSH;
         int elemsDegree, prevElems;
@@ -148,6 +148,7 @@ public:
 
         vector<vector<ScalarType>> channelSH = splitSHChannels(vecSH);
 
+        // Need to add 1 to degree to use Spherical Harmonics correctly
         this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[0][0]);  // red
         this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[1][0]);  // green
         this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[2][0]);  // blue
@@ -177,6 +178,7 @@ public:
         vector<ScalarType> shg = {colorToFdc(color[1])/SH_C0};
         vector<ScalarType> shb = {colorToFdc(color[2])/SH_C0};
 
+        // Need to add 1 to degree to use Spherical Harmonics correctly
         this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shr[0]);  // red
         this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shg[0]);  // green
         this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&shb[0]);  // blue
@@ -207,7 +209,7 @@ public:
         return ret;
     }
 
-    static vector<ScalarType> getVectorSH(GaussianSplat gs)
+    static vector<ScalarType> getVectorSH(GaussianSplat &gs)
     {
         int numElems = getNumElemChannel();
         ScalarType* coeffR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::getCoefficients(gs.sphR);
@@ -219,17 +221,17 @@ public:
         return mergeSHChannels(channelSH);
     }
 
-    static vcg::Point4<ScalarType> getColorValues(GaussianSplat gs)
+    static vcg::Point4<ScalarType> getColorValues(GaussianSplat &gs)
     {
         return gs.colorValues;
     }
 
-    static vcg::Color4b getColor(GaussianSplat gs)
+    static vcg::Color4b getColor(GaussianSplat &gs)
     {
         return gs.color;
     }
 
-    static vcg::Color4b getColor(GaussianSplat gs, ScalarType theta, ScalarType phi)
+    static vcg::Color4b getColor(GaussianSplat &gs, ScalarType theta, ScalarType phi)
     {
         return vcg::Color4b(fdcToColor(gs.sphR(theta, phi)), // r
                             fdcToColor(gs.sphG(theta, phi)), // g
@@ -237,12 +239,12 @@ public:
                             gs.color[3]); // alpha
     }
 
-    static vcg::Quaternion<ScalarType> getRotation(GaussianSplat gs)
+    static vcg::Quaternion<ScalarType> getRotation(GaussianSplat &gs)
     {
         return gs.rot;
     }
 
-    static vcg::Point3<ScalarType> getScale(GaussianSplat gs)
+    static vcg::Point3<ScalarType> getScale(GaussianSplat &gs)
     {
         return gs.scale;
     }

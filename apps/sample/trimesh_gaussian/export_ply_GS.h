@@ -122,9 +122,17 @@ public:
             handleVec[propFDC1][gi] = vecSH[1];
             handleVec[propFDC2][gi] = vecSH[2];
 
+            // Actual length of spherical harmonics
+            int numSH = gs.getNumElemChannel();
+
             for(int i=propStartSH;i<=propEndSH;i++)
             {
-                handleVec[i][gi] = vecSH[3+(i-propStartSH)];
+                int curIdx = 3+(i-propStartSH);
+
+                if(curIdx < numSH)
+                    handleVec[i][gi] = vecSH[curIdx];
+                else
+                    handleVec[i][gi] = 0;
             }
 
             // Set alpha value
