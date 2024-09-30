@@ -167,7 +167,7 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
     m_gs.Clear();
     tri::UpdateNormal<MeshType>::PerFaceNormalized(m);
     tri::UpdateColor<MeshType>::PerFaceFromVertex(m);
-    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m_gs, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m_gs, "gs");
     tri::Allocator<MeshType>::AddVertices(m_gs, m.face.size());
     
     VertexIterator vi = m_gs.vert.begin();
@@ -190,7 +190,19 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
         
         Point3f scale(radius/10, radius, radius);
         vi->P()=barycenter;
-        handleGS[vi] = GaussianSplat<float,1>(rotQuat2, scale, fi->C() );
+        handleGS[vi] = GaussianSplat<float,0>(rotQuat2, scale, fi->C());
+
+        /*
+        // Debug info
+        cout << barycenter[0] << " " << barycenter[1] << " " << barycenter[2] << endl;
+        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
+        cout << v1[0] << " " << v1[1] << " " << v1[2] << endl;
+        cout << v2[0] << " " << v2[1] << " " << v2[2] << endl;
+        cout << vcg::Angle(normal, v1) << endl;
+        cout << vcg::Angle(normal, v2) << endl;
+        cout << vcg::Angle(v1, v2) << endl;
+        cout << radius << endl;
+        exit(0);*/
     }
 }
 
@@ -206,15 +218,13 @@ static void PerVertexUniformSplat(MeshType &m, int numNeigh)
     // Compute radius attribute of each vertex using the 10 nearest neighbours
     computeVertexAvgDist(m, numNeigh);
 
-    typename MeshType::template PerVertexAttributeHandle<float> radiusH =
-        tri::Allocator<MeshType>::template GetPerVertexAttribute<float>(m, "avgDist");
-    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS =
-        tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    auto radiusH = tri::Allocator<MeshType>::template GetPerVertexAttribute<float>(m, "avgDist");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
 
     for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
         Quaternion<float> rotQuat(1,0,0,0); // Rotation irrelevant for a sphere
         Point3f scale(radiusH[vi], radiusH[vi], radiusH[vi]);
-        handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
+        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
     }
 }
 
@@ -228,8 +238,7 @@ static void PerVertexUniformSplat(MeshType &m, int numNeigh)
 static void PerVertexFlatSplat(MeshType &m, float size=0.01)
 {
     // Setup attributes
-    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS =
-        tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
 
     // Compute normals per vertex
     vcg::tri::template UpdateNormal<MeshType>::PerVertexNormalized(m);
@@ -246,8 +255,8 @@ static void PerVertexFlatSplat(MeshType &m, float size=0.01)
 
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(matZ);
-        Point3f scale(1, 1, 0.1);
-        handleGS[vi] = GaussianSplat<float,1>(rotQuat,size*scale, vi->cC());
+        Point3f scale(size, size, size/10);
+        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
 
         /*
         // Debug info
@@ -265,13 +274,13 @@ static void PerVertexFlatSplat(MeshType &m, float size=0.01)
  *
  * This function converts a mesh into a set of gaussian splats, one for each vertex,
  * with each splat being a flattened ellipsoid, scaled by the norms of the PCA vectors
- * computed on the numNeigh neighbours
+ * computed on the numNeigh neighbours.
  */
 static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
 {
     // Setup attributes
-    typename MeshType::template PerVertexAttributeHandle<vector<Point3f>> handlePCA = tri::Allocator<MeshType>::template GetPerVertexAttribute<vector<Point3f>>(m, "pca");
-    typename MeshType::template PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
+    auto handlePCA = tri::Allocator<MeshType>::template GetPerVertexAttribute<vector<Point3f>>(m, "pca");
+    auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,0>>(m, "gs");
 
     // Compute PCA per vertex
     computeVertexPCA(m, numNeigh);
@@ -342,7 +351,7 @@ static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
 
         Quaternion<float> rotQuat;
         rotQuat.FromMatrix(matMin*matMax*matNormal);
-        handleGS[vi] = GaussianSplat<float,1>(rotQuat, scale, vi->cC());
+        handleGS[vi] = GaussianSplat<float,0>(rotQuat, scale, vi->C());
     }
 }
 
@@ -352,7 +361,7 @@ int main(int argc, char *argv[])
 {
     if(argc != 3) {
         cout << "Insufficient arguments" << endl;
-        cout << "Expected args: inputPointCloud.ply output.ply" << endl;
+        cout << "Expected args: inputMesh.ply output.ply" << endl;
         return -1;
     }
 
@@ -360,15 +369,15 @@ int main(int argc, char *argv[])
     MyMesh mPointCloud;
 
     // Load input mesh
-    tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
+    tri::io::Importer<MyMesh>::Open(inputMesh, argv[1]);
 
+    // Chosen method
+    GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
+    //GaussianSplatConverter<MyMesh>::PerVertexUniformSplat(inputMesh, 10);
+    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplat(inputMesh);
+    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplatPCA(inputMesh);
 
-    //GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
-    //GaussianSplatConverter<MyMesh>::PerVertexUniformSplat(mPointCloud);
-    GaussianSplatConverter<MyMesh>::PerVertexFlatSplat(mPointCloud);
-    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplatPCA(mPointCloud);
-
-    tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
+    tri::io::ExporterPLYGS<MyMesh, 0>::Save(mPointCloud, argv[2], true);
 
     return 0;
 }

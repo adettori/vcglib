@@ -169,7 +169,7 @@ public:
         );
     }
 
-    GaussianSplat(vcg::Quaternion<ScalarType> rot, vcg::Point3<ScalarType> scale, vcg::Color4b color) {
+    GaussianSplat(vcg::Quaternion<ScalarType> &rot, vcg::Point3<ScalarType> &scale, vcg::Color4b &color) {
         this->rot = rot;
         this->scale = scale;
         this->color = color;
