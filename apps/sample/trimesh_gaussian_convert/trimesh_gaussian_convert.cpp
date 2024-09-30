@@ -35,6 +35,114 @@ class MyMesh    : public tri::TriMesh< std::vector<MyVertex>, std::vector<MyFace
 
 template <typename MeshType>
 class GaussianSplatConverter {
+
+private:
+
+static void computeVertexAvgDist(MeshType& mesh, int nNeighbors)
+{
+    typedef typename MeshType::ScalarType    ScalarType;
+    if (!vcg::tri::HasPerVertexAttribute(mesh, "radius")) {
+        vcg::tri::Allocator<MeshType>::template AddPerVertexAttribute<ScalarType>(mesh, "avgDist");
+    }
+
+    typename MeshType::template PerVertexAttributeHandle<ScalarType> h;
+    h = vcg::tri::Allocator<MeshType>::template FindPerVertexAttribute<ScalarType>(mesh, "avgDist");
+    assert(vcg::tri::Allocator<MeshType>::template IsValidHandle<ScalarType>(mesh, h));
+
+    VertexConstDataWrapper<MeshType> DW(mesh);
+    KdTree<ScalarType> knn(DW);
+
+    typename vcg::KdTree<ScalarType>::PriorityQueue pq;
+    for (size_t i = 0; i < mesh.vert.size(); i++) {
+        knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
+        ScalarType totDist = 0;
+        for(int j=0;j<pq.getNofElements();j++)
+            totDist += sqrt(pq.getWeight(j));
+        h[i] = totDist / ScalarType(pq.getNofElements());
+    }
+}
+
+static void computePCA(const vector<typename MeshType::CoordType> &pointVec,
+                typename MeshType::CoordType PCA[])
+{
+    typedef typename MeshType::CoordType CoordType;
+    typedef typename MeshType::ScalarType ScalarType;
+
+    //compute the covariance matrix
+    Eigen::Matrix<ScalarType,3,3> EigenCovMat;
+    CoordType Barycenter;
+
+    vcg::ComputeCovarianceMatrix<ScalarType>(pointVec, Barycenter, EigenCovMat);
+
+    // Compute pca vectors
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ScalarType,3,3>> eig(EigenCovMat);
+
+    Eigen::Matrix<ScalarType,1,3> eval = eig.eigenvalues();
+    Eigen::Matrix<ScalarType,3,3> evec = eig.eigenvectors();
+
+    eval = eval.cwiseAbs();
+    int normInd,maxInd,minInd;
+
+    ///get min and max coff ..
+    ///the minumum is the Normal
+    ///the other two the anisotropy directions
+    eval.minCoeff(&normInd);
+    eval.maxCoeff(&maxInd);
+    minInd=(maxInd+1)%3;
+
+    if (minInd==normInd)minInd=(normInd+1)%3;
+    assert((minInd!=normInd)&&(minInd!=maxInd)&&(minInd!=maxInd));
+
+    ///maximum direction of PCA
+    PCA[0][0] = evec(0,maxInd);
+    PCA[0][1] = evec(1,maxInd);
+    PCA[0][2] = evec(2,maxInd);
+    ///minimum direction of PCA
+    PCA[1][0] = evec(0,minInd);
+    PCA[1][1] = evec(1,minInd);
+    PCA[1][2] = evec(2,minInd);
+    ///Normal direction
+    PCA[2][0] = evec(0,normInd);
+    PCA[2][1] = evec(1,normInd);
+    PCA[2][2] = evec(2,normInd);
+
+    ScalarType LX=sqrt(eval[maxInd]);
+    ScalarType LY=sqrt(eval[minInd]);
+    //ScalarType LZ=sqrt(eval[normInd]);
+
+    ///scale the directions
+    PCA[0]*=LX;
+    PCA[1]*=LY;
+    PCA[2].Normalize();
+}
+
+static void computeVertexPCA(MeshType& mesh, int nNeighbors)
+{
+    typedef typename MeshType::ScalarType    Scalar;
+    if (!vcg::tri::HasPerVertexAttribute(mesh, "pca")) {
+        vcg::tri::Allocator<MeshType>::template AddPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
+    }
+
+    typename MeshType::template PerVertexAttributeHandle<vector<vcg::Point3<Scalar>>> h;
+    h = vcg::tri::Allocator<MeshType>::template FindPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
+    assert(vcg::tri::Allocator<MeshType>::template IsValidHandle<vector<vcg::Point3<Scalar>>>(mesh, h));
+
+    VertexConstDataWrapper<MeshType> DW(mesh);
+
+    vcg::KdTree<Scalar> knn(DW);
+    typename vcg::KdTree<Scalar>::PriorityQueue pq;
+    for (size_t i = 0; i < mesh.vert.size(); i++) {
+        knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
+        vector<Point3<Scalar>> pointsVec;
+        for(int j=0;j<pq.getNofElements();j++)
+        {
+            pointsVec.push_back(mesh.vert[pq.getIndex(j)].cP());
+        }
+        h[i].resize(3);
+        computePCA(pointsVec, &h[i][0]);
+    }
+}
+
 public:
     
     typedef typename MeshType::VertexType     VertexType;
@@ -86,126 +194,14 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
     }
 }
 
-};
-
-
-
-
-template<typename _MeshType>
-void computeVertexAvgDist(_MeshType& mesh, int nNeighbors)
-{
-    typedef typename _MeshType::ScalarType    ScalarType;
-    if (!vcg::tri::HasPerVertexAttribute(mesh, "radius")) {
-        vcg::tri::Allocator<_MeshType>::template AddPerVertexAttribute<ScalarType>(mesh, "avgDist");
-    }
-
-    typename _MeshType::template PerVertexAttributeHandle<ScalarType> h;
-    h = vcg::tri::Allocator<_MeshType>::template FindPerVertexAttribute<ScalarType>(mesh, "avgDist");
-    assert(vcg::tri::Allocator<_MeshType>::template IsValidHandle<ScalarType>(mesh, h));
-    
-    VertexConstDataWrapper<_MeshType> DW(mesh);
-    KdTree<ScalarType> knn(DW);
-    
-    typename vcg::KdTree<ScalarType>::PriorityQueue pq;
-    for (size_t i = 0; i < mesh.vert.size(); i++) {
-        knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
-        ScalarType totDist = 0;
-        for(int j=0;j<pq.getNofElements();j++)
-            totDist += sqrt(pq.getWeight(j));
-        h[i] = totDist / ScalarType(pq.getNofElements());
-    }
-}
-
-template<class _MeshType>
-void computePCA(const vector<typename _MeshType::CoordType> &pointVec,
-             typename _MeshType::CoordType PCA[])
-{
-    typedef typename _MeshType::CoordType CoordType;
-    typedef typename _MeshType::ScalarType ScalarType;
-
-    //compute the covariance matrix
-    Eigen::Matrix<ScalarType,3,3> EigenCovMat;
-    CoordType Barycenter;
-
-    vcg::ComputeCovarianceMatrix<ScalarType>(pointVec, Barycenter, EigenCovMat);
-
-    // Compute pca vectors
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ScalarType,3,3>> eig(EigenCovMat);
-
-    Eigen::Matrix<ScalarType,1,3> eval = eig.eigenvalues();
-    Eigen::Matrix<ScalarType,3,3> evec = eig.eigenvectors();
-
-    eval = eval.cwiseAbs();
-    int normInd,maxInd,minInd;
-
-    ///get min and max coff ..
-    ///the minumum is the Normal
-    ///the other two the anisotropy directions
-    eval.minCoeff(&normInd);
-    eval.maxCoeff(&maxInd);
-    minInd=(maxInd+1)%3;
-
-    if (minInd==normInd)minInd=(normInd+1)%3;
-    assert((minInd!=normInd)&&(minInd!=maxInd)&&(minInd!=maxInd));
-
-    ///maximum direction of PCA
-    PCA[0][0] = evec(0,maxInd);
-    PCA[0][1] = evec(1,maxInd);
-    PCA[0][2] = evec(2,maxInd);
-    ///minimum direction of PCA
-    PCA[1][0] = evec(0,minInd);
-    PCA[1][1] = evec(1,minInd);
-    PCA[1][2] = evec(2,minInd);
-    ///Normal direction
-    PCA[2][0] = evec(0,normInd);
-    PCA[2][1] = evec(1,normInd);
-    PCA[2][2] = evec(2,normInd);
-
-    ScalarType LX=sqrt(eval[maxInd]);
-    ScalarType LY=sqrt(eval[minInd]);
-    //ScalarType LZ=sqrt(eval[normInd]);
-
-    ///scale the directions
-    PCA[0]*=LX;
-    PCA[1]*=LY;
-    PCA[2].Normalize();
-}
-
-template<typename _MeshType>
-void computeVertexPCA(_MeshType& mesh, int nNeighbors)
-{
-    typedef typename _MeshType::ScalarType    Scalar;
-    if (!vcg::tri::HasPerVertexAttribute(mesh, "pca")) {
-        vcg::tri::Allocator<_MeshType>::template AddPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
-    }
-
-    typename _MeshType::template PerVertexAttributeHandle<vector<vcg::Point3<Scalar>>> h;
-    h = vcg::tri::Allocator<_MeshType>::template FindPerVertexAttribute<vector<vcg::Point3<Scalar>>>(mesh, "pca");
-    assert(vcg::tri::Allocator<_MeshType>::template IsValidHandle<vector<vcg::Point3<Scalar>>>(mesh, h));
-
-    VertexConstDataWrapper<_MeshType> DW(mesh);
-
-    vcg::KdTree<Scalar> knn(DW);
-    typename vcg::KdTree<Scalar>::PriorityQueue pq;
-    for (size_t i = 0; i < mesh.vert.size(); i++) {
-        knn.doQueryK(mesh.vert[i].cP(), nNeighbors, pq);
-        vector<Point3<Scalar>> pointsVec;
-        for(int j=0;j<pq.getNofElements();j++)
-        {
-            pointsVec.push_back(mesh.vert[pq.getIndex(j)].cP());
-        }
-        h[i].resize(3);
-        computePCA<_MeshType>(pointsVec, &h[i][0]);
-    }
-}
 // Uniform splat approximation
 // we generate a splat for each vertex
 // all splats are spherical scaled by the average distance to the n nearest neighbours
 
-void uniformSplatApprox(MyMesh &m)
+static void uniformSplatApprox(MyMesh &m)
 {
     // Compute radius attribute of each vertex using the 10 nearest neighbours
-    computeVertexAvgDist<MyMesh>(m, 6);
+    computeVertexAvgDist(m, 6);
 
     MyMesh::PerVertexAttributeHandle<float> radiusH = tri::Allocator<MyMesh>::GetPerVertexAttribute<float>(m, "avgDist");
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
@@ -217,7 +213,7 @@ void uniformSplatApprox(MyMesh &m)
     }
 }
 
-void flatSplatApprox(MyMesh &m)
+static void flatSplatApprox(MyMesh &m)
 {
     // Setup attributes
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
@@ -250,14 +246,14 @@ void flatSplatApprox(MyMesh &m)
     }
 }
 
-void flatSplatApproxPCA(MyMesh &m)
+static void flatSplatApproxPCA(MyMesh &m)
 {
     // Setup attributes
     MyMesh::PerVertexAttributeHandle<vector<Point3f>> handlePCA = tri::Allocator<MyMesh>::GetPerVertexAttribute<vector<Point3f>>(m, "pca");
     MyMesh::PerVertexAttributeHandle<GaussianSplat<float,1>> handleGS = tri::Allocator<MyMesh>::AddPerVertexAttribute<GaussianSplat<float,1>>(m, "gs");
 
     // Compute PCA per vertex
-    computeVertexPCA<MyMesh>(m, 5);
+    computeVertexPCA(m, 5);
     cout << "PCA computed" << endl;
 
     for(MyMesh::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
@@ -329,6 +325,8 @@ void flatSplatApproxPCA(MyMesh &m)
     }
 }
 
+};
+
 int main(int argc, char *argv[])
 {
     if(argc != 3) {
@@ -343,9 +341,9 @@ int main(int argc, char *argv[])
     // Load input mesh
     tri::io::Importer<MyMesh>::Open(mPointCloud, argv[1]);
 
-    // uniformSplatApprox(mPointCloud);
+    // GaussianSplatConverter<MyMesh>::uniformSplatApprox(mPointCloud);
     // GaussianSplatConverter<MyMesh>::PerFaceSplat(inputMesh, mPointCloud);
-    flatSplatApproxPCA(mPointCloud);
+    GaussianSplatConverter<MyMesh>::flatSplatApproxPCA(mPointCloud);
 
     tri::io::ExporterPLYGS<MyMesh, 1>::Save(mPointCloud, argv[2], true);
 
