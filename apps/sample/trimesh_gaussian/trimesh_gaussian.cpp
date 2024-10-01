@@ -7,6 +7,7 @@
 #include <wrap/io_trimesh/io_ply.h>
 #include "./import_ply_GS.h"
 #include "./export_ply_GS.h"
+#include "./import_splat.h"
 
 using namespace std;
 using namespace vcg;
@@ -49,7 +50,7 @@ int main(int argc, char *argv[])
 
     MyMesh gauss;
     const int DegreeSH = 3;
-    int ret = tri::io::ImporterPLYGS<MyMesh, DegreeSH>::Open(gauss, argv[1], pi);
+    int ret = tri::io::ImporterSPLAT<MyMesh, DegreeSH>::Open(gauss, argv[1]);
     if(ret != 0) {
         cout << "Error encountered while importing Gaussian splats: " << ret << endl;
     }
