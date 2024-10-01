@@ -51,7 +51,7 @@ public:
         // Read a total of 32 bytes from buffer
         Point3f point; // 3* 4 bytes
         Point3f scale; // 3* 4 bytes
-        Point4<unsigned char> tmpColor; // 4 bytes
+        Color4b color; // 4 bytes
         Point4<unsigned char> tmpRot; // 4 bytes
 
         for(j=0,gi=m.vert.begin();gi!=m.vert.end();++gi,j++){
@@ -60,11 +60,10 @@ public:
 
             memcpy(&point[0], &buffer[0] + j*byteRowSize, sizeof(float)*3);
             memcpy(&scale[0], &buffer[0] + j*byteRowSize + sizeof(float)*3, sizeof(float)*3);
-            memcpy(&tmpColor[0], &buffer[0] + j*byteRowSize + sizeof(float)*6, sizeof(unsigned char)*4);
+            memcpy(&color[0], &buffer[0] + j*byteRowSize + sizeof(float)*6, sizeof(unsigned char)*4);
             memcpy(&tmpRot[0], &buffer[0] + j*byteRowSize + sizeof(float)*6 + sizeof(unsigned char)*4, sizeof(unsigned char)*4);
 
             gi->P() = point;
-            Color4b color(tmpColor);
             Quaternion<float> rot((float(tmpRot[0]) - 128) / 128, (float(tmpRot[1]) - 128) / 128, (float(tmpRot[2]) - 128) / 128, (float(tmpRot[3]) - 128) / 128);
 
             handleGS[gi] = GaussianSplat<float,DegreeSH>(rot, scale, color);
