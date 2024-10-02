@@ -190,18 +190,6 @@ static void PerFaceSplat(MeshType &m, MeshType &m_gs)
         Point3f scale(radius/10, radius, radius);
         vi->P()=barycenter;
         handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, fi->C());
-
-        /*
-        // Debug info
-        cout << barycenter[0] << " " << barycenter[1] << " " << barycenter[2] << endl;
-        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
-        cout << v1[0] << " " << v1[1] << " " << v1[2] << endl;
-        cout << v2[0] << " " << v2[1] << " " << v2[2] << endl;
-        cout << vcg::Angle(normal, v1) << endl;
-        cout << vcg::Angle(normal, v2) << endl;
-        cout << vcg::Angle(v1, v2) << endl;
-        cout << radius << endl;
-        exit(0);*/
     }
 }
 
@@ -239,31 +227,31 @@ static void PerVertexFlatSplat(MeshType &m, float size=0.01)
     // Setup attributes
     auto handleGS = tri::Allocator<MeshType>::template AddPerVertexAttribute<GaussianSplat<float,DegreeSH>>(m, "gs");
 
-    // Compute normals per vertex
-    vcg::tri::template UpdateNormal<MeshType>::PerVertexNormalized(m);
-
     for(typename MeshType::VertexIterator vi=m.vert.begin();vi!=m.vert.end();++vi) {
 
         Point3f normal = vi->cN();
-        vcg::Matrix44<float> rotMat;
+        vcg::Matrix44<float> rotMat, rotMat1;
 
         // Compute rotation
-        float angleZ = Angle(Point3<float>(0,0,1), normal);
-        Point3f orthZ = Point3<float>(0,0,1) ^ normal;
-        vcg::Matrix44<float> matZ = rotMat.SetRotateRad(-angleZ, orthZ);
+        // Build orthogonal basis starting from normal
+        Eigen::Vector3f normEigVec;
+        Eigen::Vector3f orthEigVec;
+        normal.ToEigenVector(normEigVec);
+        orthEigVec = normEigVec.unitOrthogonal();
+        Point3f normalBasis1;
+        normalBasis1.FromEigenVector(orthEigVec);
+        vcg::Matrix44<float> normalMat = rotMat.SetRotateDeg(90, normal);
+        Point3f normalBasis2 = normalMat * normalBasis1;
+
+        // Set rotation matrix
+        rotMat.SetColumn(0, normalBasis1);
+        rotMat.SetColumn(1, normalBasis2);
+        rotMat.SetColumn(2, normal);
 
         Quaternion<float> rotQuat;
-        rotQuat.FromMatrix(matZ);
+        rotQuat.FromMatrix(rotMat);
         Point3f scale(size, size, size/10);
         handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vi->C());
-
-        /*
-        // Debug info
-        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
-        cout << vcg::Angle(matZ*normal, Point3<float>(0,0,1)) << endl;
-        cout << endl;
-        exit(0);
-        */
     }
 }
 
@@ -292,64 +280,13 @@ static void PerVertexFlatSplatPCA(MeshType &m, int numNeigh=5)
         // Compute scale
         Point3f scale(pca[0].Norm(), pca[1].Norm(), pca[0].Norm()/20);
 
-        // Compute rotation
-        // Translate vertex point to origin, together with normal
-        Point3f normal = vi->cN();
-
-        // Build orthogonal basis starting from newNormal
-        Eigen::Vector3f normEigVec;
-        Eigen::Vector3f orthEigVec;
-        normal.ToEigenVector(normEigVec);
-        orthEigVec = normEigVec.unitOrthogonal();
-        Point3f normalBasis1;
-        normalBasis1.FromEigenVector(orthEigVec);
-        Point3f normalBasis2 = rotMat.SetRotateDeg(-90, normal) * normalBasis1;
-
-        // Align normal of vertex with normal of pca vectors
-        float angleNormal = vcg::Angle(normal, pca[2]);
-        Point3f orthNormal = pca[2] ^ normal;
-        vcg::Matrix44<float> matNormal = rotMat.SetRotateRad(-angleNormal, orthNormal);
-
-        // Update normal basis
-        normal = matNormal * normal;
-        normalBasis1 = matNormal * normalBasis1;
-        normalBasis2 = matNormal * normalBasis2;
-
-        // Align one of the pca axis by rotating around normal
-        float angleMax = vcg::Angle(normalBasis1, pca[0]);
-        vcg::Matrix44<float> matMax = rotMat.SetRotateRad(-angleMax, normal);
-
-        // Update normal basis
-        normalBasis1 = matMax * normalBasis1;
-        normalBasis2 = matMax * normalBasis2;
-
-        float angleMin = vcg::Angle(normalBasis2, pca[1]);
-        vcg::Matrix44<float> matMin = rotMat.SetRotateRad(-angleMin, normal);
-
-        /*
-        // Update normal basis (not used, just to make procedure clear)
-        normalBasis1 = matMin * normalBasis1;
-        normalBasis2 = matMin * normalBasis2;
-
-        // Debug info
-        cout << normal[0] << " " << normal[1] << " " << normal[2] << endl;
-        cout << normalBasis1[0] << " " << normalBasis1[1] << " " << normalBasis1[2] << endl;
-        cout << normalBasis2[0] << " " << normalBasis2[1] << " " << normalBasis2[2] << endl;
-        cout << pca[2][0] << " " << pca[2][1] << " " << pca[2][2] << endl;
-        cout << normalBasis1 * normalBasis2 << endl;
-        cout << vcg::Angle(normal, normalBasis1) << endl;
-        cout << vcg::Angle(normal, normalBasis2) << endl;
-        cout << vcg::Angle(normal, pca[0]) << endl;
-        cout << vcg::Angle(normal, pca[1]) << endl;
-        cout << vcg::Angle(normal, pca[2]) << endl;
-        cout << vcg::Angle(normalBasis1, pca[0]) << endl;
-        cout << vcg::Angle(normalBasis2, pca[1]) << endl;
-        cout << endl;
-        exit(0);
-        */
+        // Build rotation matrix from axis (pca)
+        rotMat.SetColumn(0, pca[0].normalized());
+        rotMat.SetColumn(1, pca[1].normalized());
+        rotMat.SetColumn(2, pca[2].normalized());
 
         Quaternion<float> rotQuat;
-        rotQuat.FromMatrix(matMin*matMax*matNormal);
+        rotQuat.FromMatrix(rotMat);
         handleGS[vi] = GaussianSplat<float,DegreeSH>(rotQuat, scale, vi->C());
     }
 }
@@ -372,12 +309,12 @@ int main(int argc, char *argv[])
     tri::io::Importer<MyMesh>::Open(inputMesh, argv[1]);
 
     // Chosen method
-    GaussianSplatConverter<MyMesh,DegreeSH>::PerFaceSplat(inputMesh, mPointCloud);
-    //GaussianSplatConverter<MyMesh>::PerVertexUniformSplat(inputMesh, 10);
-    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplat(inputMesh);
-    //GaussianSplatConverter<MyMesh>::PerVertexFlatSplatPCA(inputMesh);
+    //GaussianSplatConverter<MyMesh,DegreeSH>::PerFaceSplat(inputMesh, mPointCloud);
+    //GaussianSplatConverter<MyMesh,DegreeSH>::PerVertexUniformSplat(inputMesh, 10);
+    //GaussianSplatConverter<MyMesh,DegreeSH>::PerVertexFlatSplat(inputMesh);
+    GaussianSplatConverter<MyMesh,DegreeSH>::PerVertexFlatSplatPCA(inputMesh);
 
-    tri::io::ExporterPLYGS<MyMesh,DegreeSH>::Save(mPointCloud, argv[2], true);
+    tri::io::ExporterPLYGS<MyMesh,DegreeSH>::Save(inputMesh, argv[2], true);
 
     return 0;
 }
