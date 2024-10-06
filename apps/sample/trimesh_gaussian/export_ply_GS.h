@@ -123,7 +123,7 @@ public:
             handleVec[propFDC2][gi] = vecSH[2];
 
             // Actual length of spherical harmonics
-            int numSH = gs.getNumElemChannel();
+            int numSH = gs.getNumElemChannel() * 3;
 
             for(int i=propStartSH;i<=propEndSH;i++)
             {

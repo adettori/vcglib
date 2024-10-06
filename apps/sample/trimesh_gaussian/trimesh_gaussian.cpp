@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     }
 
     MyMesh gauss;
-    const int DegreeSH = 0;
+    const int DegreeSH = 3;
     int ret = tri::io::ImporterKSPLAT<MyMesh, DegreeSH>::Open(gauss, argv[1]);
     if(ret != 0) {
         cout << "Error encountered while importing Gaussian splats: " << ret << endl;
