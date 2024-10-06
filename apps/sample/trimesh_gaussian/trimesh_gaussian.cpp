@@ -9,6 +9,7 @@
 #include "./export_ply_GS.h"
 #include "./import_splat.h"
 #include "export_splat.h"
+#include "import_ksplat.h"
 
 using namespace std;
 using namespace vcg;
@@ -51,7 +52,7 @@ int main(int argc, char *argv[])
 
     MyMesh gauss;
     const int DegreeSH = 0;
-    int ret = tri::io::ImporterSPLAT<MyMesh, DegreeSH>::Open(gauss, argv[1]);
+    int ret = tri::io::ImporterKSPLAT<MyMesh, DegreeSH>::Open(gauss, argv[1]);
     if(ret != 0) {
         cout << "Error encountered while importing Gaussian splats: " << ret << endl;
     }
@@ -112,7 +113,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     printf("Saving surviving vertices (%i) \n", gauss.vn);
-    tri::io::ExporterSPLAT<MyMesh, DegreeSH>::Save(gauss, "filteredGS.splat");
+    tri::io::ExporterPLYGS<MyMesh, DegreeSH>::Save(gauss, "filteredGS.ply", true);
 
     printf("Saving Colored Ellipsoids\n");
     tri::io::ExporterPLY<MyMesh>::Save(mSampledEllips, "ellipseSamplesSH.ply", tri::io::Mask::IOM_FACECOLOR);
