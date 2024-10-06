@@ -299,8 +299,12 @@ public:
                         }
                     } else if(header.compressionLevel == 2){
                         // TODO: implement decompression
-                        exit(0);
+                        vector<uint8_t> tmpSh8bit(numSh);
                         memcpy(&shVec[0], &buffer[0] + shStart, sizeof(uint8_t) * numSh);
+                        for(int k=0;k<numSh;k++){
+                            float range = header.maxSphericalHarmonicsCoeff - header.minSphericalHarmonicsCoeff;
+                            shVec[k] = tmpSh8bit[k] / 255 * range + header.minSphericalHarmonicsCoeff;
+                        }
                     }
 
                     handleGS[vertIdx] = GaussianSplat<float,DegreeSH>(rot, scale, color, shVec);
