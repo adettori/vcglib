@@ -191,6 +191,33 @@ public:
             alphaToOpacity(color[3]));
     }
 
+    GaussianSplat(vcg::Quaternion<ScalarType> &rot, vcg::Point3<ScalarType> &scale,
+                  vcg::Color4b &color, vector<ScalarType> &vecSH) {
+        // Set rotation and scale
+        this->rot = rot;
+        this->scale = scale;
+
+        vector<vector<ScalarType>> channelSH = splitSHChannels(vecSH);
+        channelSH[0].insert(channelSH[0].begin(), colorToFdc(color[0])/SH_C0);
+        channelSH[1].insert(channelSH[1].begin(), colorToFdc(color[1])/SH_C0);
+        channelSH[2].insert(channelSH[2].begin(), colorToFdc(color[2])/SH_C0);
+
+        // Need to add 1 to degree to use Spherical Harmonics correctly
+        this->sphR = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[0][0]);  // red
+        this->sphG = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[1][0]);  // green
+        this->sphB = vcg::math::SphericalHarmonics<ScalarType,DegreeSH+1>::Wrap(&channelSH[2][0]);  // blue
+
+        // Save original values
+        this->colorValues = vcg::Point4<ScalarType>(
+            channelSH[0][0],
+            channelSH[1][0],
+            channelSH[2][0],
+            color[3]);
+
+        // Set color
+        this->color = color;
+    }
+
     ~GaussianSplat() {
     }
 

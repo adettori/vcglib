@@ -21,7 +21,7 @@ private:
     static const int mainHeaderSizeBytes = 4096;
     static const int sectionHeaderSizeBytes = 1024;
     constexpr static float defaultSphericalHarmonics8BitCompressionRange = 3;
-    constexpr static int sphericalHarmonicsComponentCountForDegree[] = {0, 9, 24, 45};
+    constexpr static int sphericalHarmonicsComponentCountForDegree[] = {0, 9, 24}; // Limited to SH < 3
 
     struct compressionLevelInfo
     {
@@ -215,6 +215,7 @@ public:
             for(uint32_t j=0;j<curHeader.splatCount;j++){
 
                 if(cb && ((vertIdx%1000)==0) && ((m.vn) != 0) )(*cb)( (100*vertIdx)/(m.vn), "Loading Gaussians");
+                bufferOffset = j*bytesPerSplat;
 
                 // Position
                 Point3f pos;
@@ -229,7 +230,7 @@ public:
                         uint32_t bucketSplatIndex = maxSplatIndexInFullBuckets;
                         bucketIdx = curHeader.fullBucketCount;
                         uint32_t partiallyFullBucketIndex = 0;
-                        uint32_t partiallyFilledBucketLengths[curHeader.partiallyFilledBucketCount];
+                        vector<uint32_t> partiallyFilledBucketLengths(curHeader.partiallyFilledBucketCount);
 
                         if(curHeader.partiallyFilledBucketCount>0)
                             memcpy(&partiallyFilledBucketLengths[0], &buffer[0] + sectionBase, sizeof(uint32_t) * curHeader.partiallyFilledBucketCount);
@@ -282,13 +283,35 @@ public:
                 Color4b color;
                 memcpy(&color[0], &buffer[0] + sectionBase + bucketData + bufferOffset + compressionInfo[header.compressionLevel].colorOffsetBytes, sizeof(uint8_t) * 4);
 
-                m.vert[vertIdx].P() = pos;
-                handleGS[vertIdx] = GaussianSplat<float,DegreeSH>(rot, scale, color);
+                // Spherical Harmonics
+                if(curHeader.sphericalHarmonicsDegree > 0){
+                    int numSh = sphericalHarmonicsComponentCountForDegree[curHeader.sphericalHarmonicsDegree];
+                    vector<float> shVec(numSh);
+                    int shStart = sectionBase + bucketData + bufferOffset + compressionInfo[header.compressionLevel].sphericalHarmonicsOffsetBytes;
 
-                bufferOffset += bytesPerSplat;
+                    if(header.compressionLevel == 0){
+                        memcpy(&shVec[0], &buffer[0] + shStart, sizeof(float) * numSh);
+                    } else if(header.compressionLevel == 1){
+                        vector<Eigen::half> tmpSh(numSh);
+                        memcpy(&tmpSh[0], &buffer[0] + shStart, sizeof(uint16_t) * numSh);
+                        for(int k=0;k<numSh;k++){
+                            shVec[k] = Eigen::half_impl::half_to_float(tmpSh[k]);
+                        }
+                    } else if(header.compressionLevel == 2){
+                        // TODO: implement decompression
+                        exit(0);
+                        memcpy(&shVec[0], &buffer[0] + shStart, sizeof(uint8_t) * numSh);
+                    }
+
+                    handleGS[vertIdx] = GaussianSplat<float,DegreeSH>(rot, scale, color, shVec);
+                } else {
+                    handleGS[vertIdx] = GaussianSplat<float,DegreeSH>(rot, scale, color);
+                }
+
+                m.vert[vertIdx].P() = pos;
+
                 vertIdx++;
             }
-
             sectionBase += bucketData + bufferOffset;
         }
 
