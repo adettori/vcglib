@@ -17,7 +17,8 @@ template <class OpenMeshType, int DegreeSH>
 class ImporterKSPLAT
 {
 private:
-    // KSPLAT organisation: main header -> all section headers -> all section data, each with all the buckets at the start
+    // KSPLAT organisation: main header -> all section headers -> all section data
+    // Each section's data is organized with all the bucket info at the start, followed by scale, rotation, color and spherical harmonics
     static const int mainHeaderSizeBytes = 4096;
     static const int sectionHeaderSizeBytes = 1024;
     constexpr static float defaultSphericalHarmonics8BitCompressionRange = 3;
@@ -165,7 +166,7 @@ public:
             return vcg::ply::E_CANTOPEN;
         }
 
-        // copies all data into buffer
+        // Copies all data from the file into buffer
         std::vector<unsigned char> buffer(std::istreambuf_iterator<char>(inputFile), {});
 
         mainHeader header;
@@ -220,6 +221,7 @@ public:
                 // Position
                 Point3f pos;
 
+                // Find bucket containing the closest prototype point of the original vertex
                 if(header.compressionLevel == 0){
                     memcpy(&pos[0], &buffer[0] + sectionBase + bufferOffset, sizeof(float) * 3);
                 } else {
@@ -254,6 +256,7 @@ public:
                     memcpy(&tmpPos[0], &buffer[0] + sectionBase + bucketData + bufferOffset, sizeof(uint16_t) * 3);
                     pos = Point3f(tmpPos[0], tmpPos[1], tmpPos[2]);
 
+                    // Compute bucket point position wrt the center of the scene, which can be customized
                     memcpy(&bucket[0], &buffer[0] + sectionBase + bucketOffset, sizeof(float) * bucketStorageSizeFloats);
                     pos = (pos - Point3f(compressionScaleRange, compressionScaleRange, compressionScaleRange)) * compressionScaleFactor + bucket;
                 }
@@ -261,6 +264,7 @@ public:
                 // Scale
                 Point3f scale;
                 if(header.compressionLevel > 0){
+                    // Decompress from float16
                     Eigen::half tmpScale[3];
                     memcpy(&tmpScale[0], &buffer[0] + sectionBase + bucketData + bufferOffset + compressionInfo[header.compressionLevel].scaleOffsetBytes, sizeof(uint16_t) * 3);
                     scale = Point3f(Eigen::half_impl::half_to_float(tmpScale[0]), Eigen::half_impl::half_to_float(tmpScale[1]), Eigen::half_impl::half_to_float(tmpScale[2]));
@@ -271,6 +275,7 @@ public:
                 // Rotation
                 Quaternion<float> rot;
                 if(header.compressionLevel > 0){
+                    // Decompress from float16
                     Eigen::half tmpRot[4];
                     memcpy(&tmpRot[0], &buffer[0] + sectionBase + bucketData + bufferOffset + compressionInfo[header.compressionLevel].rotationOffsetBytes, sizeof(uint16_t) * 4);
                     rot = Quaternion<float>(Eigen::half_impl::half_to_float(tmpRot[0]), Eigen::half_impl::half_to_float(tmpRot[1]),
@@ -298,7 +303,7 @@ public:
                             shVec[k] = Eigen::half_impl::half_to_float(tmpSh[k]);
                         }
                     } else if(header.compressionLevel == 2){
-                        // TODO: implement decompression
+                        // Decompress from uint8_t
                         vector<uint8_t> tmpSh8bit(numSh);
                         memcpy(&shVec[0], &buffer[0] + shStart, sizeof(uint8_t) * numSh);
                         for(int k=0;k<numSh;k++){
